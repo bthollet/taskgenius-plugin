@@ -110,6 +110,7 @@ import {
 	migrateSettings,
 	repairStatusCycles,
 } from "./utils/settings-migration";
+import { createMigrationRegistry } from "./utils/migration";
 import { VersionManager } from "./managers/version-manager";
 import { RebuildProgressManager } from "./managers/rebuild-progress-manager";
 import DesktopIntegrationManager from "./managers/desktop-integration-manager";
@@ -1983,18 +1984,45 @@ export default class TaskProgressBarPlugin extends Plugin {
 			);
 		} catch {}
 
-		// Migrate settings to new formats
-		migrateSettings(this.settings);
+		// Run migrations through the version-keyed registry. Phase 0 W1.
+		// The legacy bundle step wraps the prior migrateSettings + inheritance
+		// + fluent default-backfill paths under one atomic try/commit, so a
+		// throw in any of them leaves settings untouched. The bundle reads
+		// `savedData` to detect old projectConfig.metadataConfig.* keys that
+		// got dropped during the Object.assign with DEFAULT_SETTINGS — we
+		// stash it on the settings object briefly so the step can see it.
+		try {
+			(this.settings as any).__transient_savedData__ = savedData;
+			const registry = createMigrationRegistry();
+			const result = await registry.run(this.settings, {
+				toVersion: this.manifest.version,
+			});
+			if (!result.ok) {
+				console.error(
+					"[Task Genius] MigrationRegistry run failed:",
+					result.error,
+				);
+				// Fall back to the legacy direct calls so the user isn't left
+				// in a half-migrated state. Behavior is identical to before W1.
+				migrateSettings(this.settings);
+				this.migrateInheritanceSettings(savedData);
+			} else if (result.changed) {
+				console.log(
+					"[Task Genius] Migrations applied:",
+					Object.values(result.results).flatMap((r) => r.details),
+				);
+			}
+		} finally {
+			delete (this.settings as any).__transient_savedData__;
+		}
 
-		// Repair and validate status cycles
+		// Repair and validate status cycles (independent of migration registry —
+		// runs every load to clean up dynamically-corrupted state).
 		if (this.settings.statusCycles) {
 			this.settings.statusCycles = repairStatusCycles(
 				this.settings.statusCycles,
 			);
 		}
-
-		// Migrate old inheritance settings to new structure
-		this.migrateInheritanceSettings(savedData);
 	}
 
 	private migrateInheritanceSettings(savedData: any) {

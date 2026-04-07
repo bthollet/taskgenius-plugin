@@ -989,6 +989,13 @@ export interface TaskProgressBarSettings {
 
 	// Custom Calendar Views Settings
 	customCalendarViews?: CustomCalendarViewConfig[];
+
+	// Migration metadata. Written by the MigrationRegistry on successful run.
+	// Phase 0 W1 — used to gate version-keyed migration steps.
+	_meta?: {
+		/** Plugin version of the last successful migration run, semver. */
+		lastMigratedVersion?: string;
+	};
 }
 
 /** Define the default settings */
