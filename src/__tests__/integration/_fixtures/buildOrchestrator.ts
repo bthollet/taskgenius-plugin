@@ -138,6 +138,25 @@ export class FakeVault {
 	private bus = new EventBus();
 	configDir = ".obsidian";
 
+	/**
+	 * Vault adapter — minimal surface for code that does
+	 * `vault.adapter.stat(path)`. Used by Orchestrator.processFileImmediate
+	 * for mtime checks.
+	 */
+	adapter = {
+		stat: async (path: string) => {
+			const f = this.fileMap.get(path);
+			if (!f) return null;
+			return {
+				mtime: f.stat.mtime,
+				ctime: f.stat.ctime,
+				size: f.stat.size,
+				type: "file" as const,
+			};
+		},
+		exists: async (path: string) => this.fileMap.has(path),
+	};
+
 	constructor(initialFiles?: Record<string, string> | VaultFile[]) {
 		if (Array.isArray(initialFiles)) {
 			for (const f of initialFiles) this.__seed(f.path, f.content, f.mtime);
