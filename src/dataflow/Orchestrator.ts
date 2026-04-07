@@ -24,6 +24,7 @@ import { ConfigurableTaskParser } from "./core/ConfigurableTaskParser";
 import { MetadataParseMode } from "../types/TaskParserConfig";
 import { TimeParsingService } from "../services/time-parsing-service";
 import type { EnhancedTimeParsingConfig } from "../types/time-parsing";
+import { scopesForFields } from "./cache/scope-map";
 
 /**
  * DataflowOrchestrator - Coordinates all dataflow components
@@ -1699,40 +1700,76 @@ export class DataflowOrchestrator {
 	}
 
 	/**
-	 * Clear all data and rebuild
+	 * Clear all data and rebuild.
+	 *
+	 * If rebuild fails partway through (e.g. a worker crash, vault read error,
+	 * or persistence failure), we don't want to leave the cache in a partial
+	 * state — the next plugin load would think it's loading a complete index
+	 * but actually be missing files. As a last-resort, on any thrown error we
+	 * clear every cache namespace so the next load triggers a clean rebuild
+	 * from disk. The error is re-thrown so the caller can react.
+	 *
+	 * This is W2-bis in the v10 Phase 0 plan. It's intentionally minimal —
+	 * snapshot/restore is deferred to a future phase.
 	 */
 	async rebuild(): Promise<void> {
-		// Clear all data
-		await this.repository.clear();
+		try {
+			// Clear all data
+			await this.repository.clear();
 
-		// Process all markdown and canvas files
-		const files = this.vault.getMarkdownFiles();
-		const canvasFiles = this.vault
-			.getFiles()
-			.filter((f) => f.extension === "canvas");
+			// Process all markdown and canvas files
+			const files = this.vault.getMarkdownFiles();
+			const canvasFiles = this.vault
+				.getFiles()
+				.filter((f) => f.extension === "canvas");
 
-		const allFiles = [...files, ...canvasFiles];
+			const allFiles = [...files, ...canvasFiles];
 
-		// Process in batches for performance
-		const BATCH_SIZE = 50;
-		for (let i = 0; i < allFiles.length; i += BATCH_SIZE) {
-			const batch = allFiles.slice(i, i + BATCH_SIZE);
-			await this.processBatch(batch);
+			// Process in batches for performance
+			const BATCH_SIZE = 50;
+			for (let i = 0; i < allFiles.length; i += BATCH_SIZE) {
+				const batch = allFiles.slice(i, i + BATCH_SIZE);
+				await this.processBatch(batch);
+			}
+
+			// Persist the rebuilt index
+			await this.repository.persist();
+
+			// Emit ready event
+			emit(this.app, Events.CACHE_READY, {
+				initial: false,
+				timestamp: Date.now(),
+				seq: Seq.next(),
+			});
+		} catch (err) {
+			console.error(
+				"[DataflowOrchestrator] Rebuild failed; clearing caches to force a clean rebuild on next load:",
+				err,
+			);
+			// Last-resort cleanup: clear every namespace so the next plugin load
+			// can't read a partial cache that looks complete.
+			try {
+				await this.storage.clearNamespace("raw");
+				await this.storage.clearNamespace("augmented");
+				await this.storage.clearNamespace("project");
+				await this.storage.clearNamespace("consolidated");
+			} catch (clearErr) {
+				console.error(
+					"[DataflowOrchestrator] Last-resort cache clear ALSO failed; cache may be in inconsistent state:",
+					clearErr,
+				);
+			}
+			throw err;
 		}
-
-		// Persist the rebuilt index
-		await this.repository.persist();
-
-		// Emit ready event
-		emit(this.app, Events.CACHE_READY, {
-			initial: false,
-			timestamp: Date.now(),
-			seq: Seq.next(),
-		});
 	}
 
 	/**
-	 * Handle settings change
+	 * Handle settings change.
+	 *
+	 * Pass the cache scopes that the changed settings touch. Existing call
+	 * sites pass scope strings directly; new call sites should prefer
+	 * `onSettingsFieldsChanged()` (W4a) which derives scopes from a typed
+	 * field map.
 	 */
 	async onSettingsChange(scopes: string[]): Promise<void> {
 		// Clear relevant caches based on scope
@@ -1760,6 +1797,34 @@ export class DataflowOrchestrator {
 		if (scopes.some((s) => ["parser", "augment", "project"].includes(s))) {
 			await this.rebuild();
 		}
+	}
+
+	/**
+	 * Handle settings change by typed field path. Resolves the field paths to
+	 * cache scopes via `SETTINGS_FIELD_TO_SCOPES` and delegates to the
+	 * stringly-typed `onSettingsChange`.
+	 *
+	 * Phase 0 W4a — adds the typed entry point. Phase 1+ migrates existing
+	 * call sites away from raw scope strings as features are touched. The
+	 * primary value is centralizing "which fields invalidate which scopes"
+	 * so the migration can be mechanical.
+	 *
+	 * Field paths are dot-separated (e.g. "fileMetadataInheritance.inheritFromFrontmatter").
+	 * Unknown fields contribute no scopes (no cache impact).
+	 */
+	async onSettingsFieldsChanged(fields: readonly string[]): Promise<void> {
+		const scopes = scopesForFields(fields);
+		if (scopes.length === 0) {
+			// Nothing cache-affecting changed; still emit the change event so
+			// observers that don't care about scopes (e.g. UI refresh) can react.
+			emit(this.app, Events.SETTINGS_CHANGED, {
+				scopes: [],
+				fields,
+				timestamp: Date.now(),
+			});
+			return;
+		}
+		await this.onSettingsChange(scopes);
 	}
 
 	/**

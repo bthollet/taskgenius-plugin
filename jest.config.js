@@ -7,6 +7,7 @@ module.exports = {
 	moduleNameMapper: {
 		"^obsidian$": "<rootDir>/src/__mocks__/obsidian.ts",
 		"^moment$": "<rootDir>/src/__mocks__/moment.js",
+		"^localforage$": "<rootDir>/src/__mocks__/localforage.ts",
 		"^@codemirror/state$": "<rootDir>/src/__mocks__/codemirror-state.ts",
 		"^@codemirror/view$": "<rootDir>/src/__mocks__/codemirror-view.ts",
 		"^@codemirror/language$":

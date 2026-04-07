@@ -5,6 +5,7 @@ import { TaskWorkerManager, DEFAULT_WORKER_OPTIONS } from "./TaskWorkerManager";
 import { ProjectDataWorkerManager } from "./ProjectDataWorkerManager";
 import { MetadataParseMode } from "../../types/TaskParserConfig";
 import { ConfigurableTaskParser } from "@/dataflow/core/ConfigurableTaskParser";
+import { WorkerTimeoutError } from "./errors";
 
 /**
  * WorkerOrchestrator - Unified task and project worker management
@@ -24,6 +25,9 @@ export class WorkerOrchestrator {
 	private metrics = {
 		taskParsingSuccess: 0,
 		taskParsingFailures: 0,
+		// Subset of taskParsingFailures: hung-worker timeouts (W3). Tracked
+		// separately so we can tell "worker hung" from "worker errored".
+		taskWorkerTimeouts: 0,
 		projectDataSuccess: 0,
 		projectDataFailures: 0,
 		averageTaskParsingTime: 0,
@@ -87,8 +91,12 @@ export class WorkerOrchestrator {
 				error
 			);
 
-			// Update failure metrics
+			// Update failure metrics. Track timeouts separately so observability
+			// can distinguish "worker hung" from "worker threw" (W3).
 			this.metrics.taskParsingFailures++;
+			if (error instanceof WorkerTimeoutError) {
+				this.metrics.taskWorkerTimeouts++;
+			}
 			this.handleWorkerFailure();
 
 			// Fallback to main thread
@@ -132,8 +140,12 @@ export class WorkerOrchestrator {
 				error
 			);
 
-			// Update failure metrics
+			// Update failure metrics. A timeout in a batch is counted once for
+			// the offending file, not for the whole batch.
 			this.metrics.taskParsingFailures += files.length;
+			if (error instanceof WorkerTimeoutError) {
+				this.metrics.taskWorkerTimeouts++;
+			}
 			this.handleWorkerFailure();
 
 			// Fallback to main thread
@@ -220,7 +232,12 @@ export class WorkerOrchestrator {
 	}
 
 	/**
-	 * Generic retry mechanism with exponential backoff
+	 * Generic retry mechanism with exponential backoff.
+	 *
+	 * Skips retries for WorkerTimeoutError: a worker that just hung is being
+	 * replaced anyway, and the file content is the most likely cause of the
+	 * hang. Retrying would just waste 7s of exponential backoff before falling
+	 * back to main thread, which is the right answer for hung tasks. (W3)
 	 */
 	private async retryOperation<T>(
 		operation: () => Promise<T>,
@@ -247,6 +264,11 @@ export class WorkerOrchestrator {
 					`WorkerOrchestrator: ${operationName} failed, attempt ${attempt}/${maxRetries}:`,
 					error
 				);
+
+				// Don't retry timeout errors — see method docs.
+				if (error instanceof WorkerTimeoutError) {
+					break;
+				}
 
 				// If this is the last attempt, don't wait
 				if (attempt === maxRetries) {
@@ -525,6 +547,7 @@ export class WorkerOrchestrator {
 		this.metrics = {
 			taskParsingSuccess: 0,
 			taskParsingFailures: 0,
+			taskWorkerTimeouts: 0,
 			projectDataSuccess: 0,
 			projectDataFailures: 0,
 			averageTaskParsingTime: 0,

@@ -395,6 +395,18 @@ export class Component {
 	unload(): void {
 		this.loaded = false;
 		this.children.forEach((child) => child.unload());
+		// Drain registered event refs by calling their unload() — this matches
+		// real Obsidian Component behavior so that listener-leak tests work.
+		// Without this, code that correctly uses registerEvent() still appears
+		// to leak in jest because the mock never calls eventRef.unload().
+		for (const ref of this._events) {
+			try {
+				ref.unload();
+			} catch {
+				/* listener cleanup must not throw */
+			}
+		}
+		this._events = [];
 		this.onunload();
 	}
 
