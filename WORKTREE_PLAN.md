@@ -1,5 +1,18 @@
 # Task Genius v10 — Phase 1-4 Worktree Split
 
+> **Update (2026-04-07):** the 5 worktrees described below have each been
+> split into a self-contained brief in [`./.v10-worktrees/`](./.v10-worktrees/).
+> Hand each brief to one agent / developer. This file remains as the umbrella
+> overview; individual briefs have the actionable instructions.
+>
+> | Worktree | Brief |
+> |---|---|
+> | A — banners | [`.v10-worktrees/worktree-a-banners.md`](./.v10-worktrees/worktree-a-banners.md) |
+> | B — Archiver | [`.v10-worktrees/worktree-b-archiver.md`](./.v10-worktrees/worktree-b-archiver.md) |
+> | C — read-only | [`.v10-worktrees/worktree-c-readonly.md`](./.v10-worktrees/worktree-c-readonly.md) |
+> | D — cliff cluster | [`.v10-worktrees/worktree-d-cliff.md`](./.v10-worktrees/worktree-d-cliff.md) |
+> | E — cleanup | [`.v10-worktrees/worktree-e-cleanup.md`](./.v10-worktrees/worktree-e-cleanup.md) |
+
 Operational follow-up to the v10 refactor plan
 (`~/.claude/plans/dynamic-mixing-pie.md`). That document is the source of
 truth for **what** to do in each phase. This document is the source of truth
