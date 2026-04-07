@@ -562,11 +562,27 @@ export class Repository {
 	}
 
 	/**
-	 * Cleanup and ensure all pending data is persisted
+	 * Cleanup and ensure all pending data is persisted.
+	 *
+	 * IMPORTANT: also unloads the underlying TaskIndexer (a Component) so its
+	 * vault listeners (modify/delete/create) are deregistered. Prior to this,
+	 * those listeners leaked across plugin reloads — TaskIndexer was constructed
+	 * eagerly in the Repository constructor but never explicitly unloaded.
+	 * See W2 in the v10 Phase 0 plan.
 	 */
 	async cleanup(): Promise<void> {
 		// Execute any pending persist operations
 		await this.executePersist();
+
+		// Tear down the indexer's Component lifecycle so its registered events
+		// (vault.on modify/delete/create in TaskIndexer.setupEventListeners)
+		// are released. The Component base class' unload() walks _events and
+		// calls offref on each.
+		try {
+			(this.indexer as any).unload?.();
+		} catch (error) {
+			console.error("[Repository] Error unloading TaskIndexer:", error);
+		}
 	}
 
 	/**

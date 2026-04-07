@@ -28,6 +28,7 @@ import {
 // @ts-ignore Ignore type error for worker import
 import TaskWorker from "./TaskIndex.worker";
 import { Deferred, deferred } from "./deferred-promise";
+import { WorkerTimeoutError } from "./errors";
 
 // Using similar queue structure as importer.ts
 import { Queue } from "@datastructures-js/queue";
@@ -42,6 +43,14 @@ export interface WorkerPoolOptions {
 	cpuUtilization: number;
 	/** Whether to enable debug logging */
 	debug?: boolean;
+	/**
+	 * Per-task timeout in milliseconds. If a worker doesn't post a response
+	 * within this window the worker is terminated, the active task's promise
+	 * is rejected with WorkerTimeoutError, and a replacement worker is spawned.
+	 * Default: 8000 (8s) — enough headroom for a worst-case 200KB markdown
+	 * parse on a slow desktop. See W3 in v10 Phase 0 plan.
+	 */
+	workerTimeoutMs?: number;
 	/** Settings for the task indexer */
 	settings?: {
 		preferMetadataFormat: "dataview" | "tasks";
@@ -61,6 +70,14 @@ export interface WorkerPoolOptions {
 		areaTagPrefix?: Record<string, string>;
 	};
 }
+
+/**
+ * Default per-task timeout in ms for the task worker pool. A debug override
+ * can be supplied via `(globalThis as any).__taskGeniusDebug?.workerTimeoutMs`
+ * which the constructor reads at boot — used by integration tests to shrink
+ * the timeout to a couple hundred ms.
+ */
+export const DEFAULT_TASK_WORKER_TIMEOUT_MS = 8000;
 
 /**
  * Default worker pool options
@@ -103,6 +120,12 @@ interface PoolWorker {
 	availableAt: number;
 	/** The active task this worker is processing, if any */
 	active?: [TFile, Deferred<any>, number, TaskPriority];
+	/**
+	 * Per-task timeout handle. Set when a task is dispatched to this worker
+	 * (in schedule()), cleared when finish() runs, fires onTaskTimeout() if
+	 * the worker doesn't respond within workerTimeoutMs. See W3 in plan.
+	 */
+	timeoutHandle?: ReturnType<typeof setTimeout>;
 }
 
 /**
@@ -169,6 +192,10 @@ export class TaskWorkerManager extends Component {
 	private initialized: boolean = false;
 	/** Reference to task indexer for cache checking */
 	private taskIndexer?: any;
+	/** Effective per-task timeout in ms (resolved from options + debug override) */
+	private workerTimeoutMs: number;
+	/** Count of timed-out tasks. Exposed via getStats() and the orchestrator metrics. */
+	private timeoutCount: number = 0;
 	/** Performance statistics */
 	private stats = {
 		filesSkipped: 0,
@@ -189,8 +216,34 @@ export class TaskWorkerManager extends Component {
 		this.vault = vault;
 		this.metadataCache = metadataCache;
 
+		// Resolve effective per-task timeout. Precedence:
+		//   1. options.workerTimeoutMs (explicit)
+		//   2. debug override on globalThis (for tests)
+		//   3. DEFAULT_TASK_WORKER_TIMEOUT_MS
+		const debugOverride =
+			(globalThis as any).__taskGeniusDebug?.workerTimeoutMs;
+		this.workerTimeoutMs =
+			this.options.workerTimeoutMs ??
+			(typeof debugOverride === "number" ? debugOverride : undefined) ??
+			DEFAULT_TASK_WORKER_TIMEOUT_MS;
+
 		// Initialize workers up to max
 		this.initializeWorkers();
+	}
+
+	/**
+	 * Get the count of timed-out tasks since the last reset.
+	 * Used by WorkerOrchestrator metrics.
+	 */
+	public getTimeoutCount(): number {
+		return this.timeoutCount;
+	}
+
+	/**
+	 * Reset the timeout counter (e.g. when metrics are reset).
+	 */
+	public resetTimeoutCount(): void {
+		this.timeoutCount = 0;
 	}
 
 	/**
@@ -689,6 +742,14 @@ export class TaskWorkerManager extends Component {
 
 		const {file, promise, priority} = queueItem;
 		worker.active = [file, promise, 0, priority]; // 0 表示重试次数
+		// Arm a per-task timeout. If the worker doesn't respond within
+		// workerTimeoutMs, onTaskTimeout will terminate it, reject the promise
+		// with WorkerTimeoutError, spawn a replacement, and continue scheduling.
+		// Cleared in finish() and on direct terminate().
+		worker.timeoutHandle = setTimeout(
+			() => this.onTaskTimeout(worker),
+			this.workerTimeoutMs,
+		);
 
 		try {
 			this.getTaskMetadata(file)
@@ -722,6 +783,10 @@ export class TaskWorkerManager extends Component {
 				})
 				.catch((error) => {
 					console.error(`Error reading file ${file.path}:`, error);
+					if (worker.timeoutHandle) {
+						clearTimeout(worker.timeoutHandle);
+						worker.timeoutHandle = undefined;
+					}
 					promise.reject(error);
 					worker.active = undefined;
 
@@ -733,6 +798,10 @@ export class TaskWorkerManager extends Component {
 				});
 		} catch (error) {
 			console.error(`Error processing file ${file.path}:`, error);
+			if (worker.timeoutHandle) {
+				clearTimeout(worker.timeoutHandle);
+				worker.timeoutHandle = undefined;
+			}
 			promise.reject(error);
 			worker.active = undefined;
 
@@ -751,6 +820,14 @@ export class TaskWorkerManager extends Component {
 		worker: PoolWorker,
 		data: IndexerResult
 	): Promise<void> {
+		// Cancel the timeout before doing any work — the worker did respond,
+		// so we no longer want to consider it hung. Even if the response is
+		// itself an error, the timeout path is no longer correct here.
+		if (worker.timeoutHandle) {
+			clearTimeout(worker.timeoutHandle);
+			worker.timeoutHandle = undefined;
+		}
+
 		if (!worker.active) {
 			console.log("Received a stale worker message. Ignoring.", data);
 			return;
@@ -881,6 +958,13 @@ export class TaskWorkerManager extends Component {
 	 * Terminate a worker
 	 */
 	private terminate(worker: PoolWorker): void {
+		// Always clear the timeout — orphaned timers are exactly what plugin
+		// reload races complain about.
+		if (worker.timeoutHandle) {
+			clearTimeout(worker.timeoutHandle);
+			worker.timeoutHandle = undefined;
+		}
+
 		worker.worker.terminate();
 
 		if (worker.active) {
@@ -889,6 +973,68 @@ export class TaskWorkerManager extends Component {
 		}
 
 		this.log(`Terminated worker #${worker.id}`);
+	}
+
+	/**
+	 * Called when a worker doesn't respond within workerTimeoutMs.
+	 *
+	 * Strategy: kill the worker, reject the active promise with
+	 * WorkerTimeoutError so the WorkerOrchestrator can fall back to main-thread
+	 * processing for this file, then spawn a replacement worker so the pool
+	 * stays warm. Without termination, a hung worker would hold its slot and
+	 * starve the queue until the existing 30s circuit breaker tripped.
+	 */
+	private onTaskTimeout(worker: PoolWorker): void {
+		// Defensive: if the timeout fires after finish() already cleared the
+		// handle, do nothing.
+		if (!worker.active) return;
+
+		const [file, promise] = worker.active;
+		console.warn(
+			`[TaskWorkerManager] Worker #${worker.id} timed out on ${file.path} after ${this.workerTimeoutMs}ms; terminating and replacing.`,
+		);
+
+		this.timeoutCount++;
+
+		// Terminate the hung worker. Note: terminate() will also clear the
+		// handle (no-op here since we just fired) and reject worker.active[1]
+		// with "Terminated", but we want a more specific error, so we reject
+		// here first then null out worker.active before terminate runs.
+		try {
+			worker.worker.terminate();
+		} catch (e) {
+			console.error("[TaskWorkerManager] Error terminating worker:", e);
+		}
+
+		// Remove from pool
+		this.workers.delete(worker.id);
+
+		// Reject with the typed error so the orchestrator can distinguish
+		// timeouts from other failures.
+		promise.reject(new WorkerTimeoutError(file.path, this.workerTimeoutMs));
+		this.outstanding.delete(file.path);
+		worker.active = undefined;
+		worker.timeoutHandle = undefined;
+
+		// Keep the pool warm: if we're below capacity (we just dropped one),
+		// spawn a replacement so subsequent tasks aren't starved.
+		if (this.active && this.workers.size < this.options.maxWorkers) {
+			try {
+				const replacement = this.newWorker();
+				this.workers.set(replacement.id, replacement);
+				this.log(
+					`Spawned replacement worker #${replacement.id} after timeout`,
+				);
+			} catch (e) {
+				console.error(
+					"[TaskWorkerManager] Failed to spawn replacement worker after timeout:",
+					e,
+				);
+			}
+		}
+
+		// Drain the queue with whatever workers remain.
+		this.schedule();
 	}
 
 	/**

@@ -1699,36 +1699,67 @@ export class DataflowOrchestrator {
 	}
 
 	/**
-	 * Clear all data and rebuild
+	 * Clear all data and rebuild.
+	 *
+	 * If rebuild fails partway through (e.g. a worker crash, vault read error,
+	 * or persistence failure), we don't want to leave the cache in a partial
+	 * state — the next plugin load would think it's loading a complete index
+	 * but actually be missing files. As a last-resort, on any thrown error we
+	 * clear every cache namespace so the next load triggers a clean rebuild
+	 * from disk. The error is re-thrown so the caller can react.
+	 *
+	 * This is W2-bis in the v10 Phase 0 plan. It's intentionally minimal —
+	 * snapshot/restore is deferred to a future phase.
 	 */
 	async rebuild(): Promise<void> {
-		// Clear all data
-		await this.repository.clear();
+		try {
+			// Clear all data
+			await this.repository.clear();
 
-		// Process all markdown and canvas files
-		const files = this.vault.getMarkdownFiles();
-		const canvasFiles = this.vault
-			.getFiles()
-			.filter((f) => f.extension === "canvas");
+			// Process all markdown and canvas files
+			const files = this.vault.getMarkdownFiles();
+			const canvasFiles = this.vault
+				.getFiles()
+				.filter((f) => f.extension === "canvas");
 
-		const allFiles = [...files, ...canvasFiles];
+			const allFiles = [...files, ...canvasFiles];
 
-		// Process in batches for performance
-		const BATCH_SIZE = 50;
-		for (let i = 0; i < allFiles.length; i += BATCH_SIZE) {
-			const batch = allFiles.slice(i, i + BATCH_SIZE);
-			await this.processBatch(batch);
+			// Process in batches for performance
+			const BATCH_SIZE = 50;
+			for (let i = 0; i < allFiles.length; i += BATCH_SIZE) {
+				const batch = allFiles.slice(i, i + BATCH_SIZE);
+				await this.processBatch(batch);
+			}
+
+			// Persist the rebuilt index
+			await this.repository.persist();
+
+			// Emit ready event
+			emit(this.app, Events.CACHE_READY, {
+				initial: false,
+				timestamp: Date.now(),
+				seq: Seq.next(),
+			});
+		} catch (err) {
+			console.error(
+				"[DataflowOrchestrator] Rebuild failed; clearing caches to force a clean rebuild on next load:",
+				err,
+			);
+			// Last-resort cleanup: clear every namespace so the next plugin load
+			// can't read a partial cache that looks complete.
+			try {
+				await this.storage.clearNamespace("raw");
+				await this.storage.clearNamespace("augmented");
+				await this.storage.clearNamespace("project");
+				await this.storage.clearNamespace("consolidated");
+			} catch (clearErr) {
+				console.error(
+					"[DataflowOrchestrator] Last-resort cache clear ALSO failed; cache may be in inconsistent state:",
+					clearErr,
+				);
+			}
+			throw err;
 		}
-
-		// Persist the rebuilt index
-		await this.repository.persist();
-
-		// Emit ready event
-		emit(this.app, Events.CACHE_READY, {
-			initial: false,
-			timestamp: Date.now(),
-			seq: Seq.next(),
-		});
 	}
 
 	/**

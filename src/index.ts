@@ -159,6 +159,13 @@ export default class TaskProgressBarPlugin extends Plugin {
 	// Write API for dataflow architecture
 	writeAPI?: WriteAPI;
 
+	// Resolves once all async cleanup work scheduled by onunload() has settled.
+	// Obsidian's onunload() signature is sync (void), so async cleanup work has
+	// to be fired off without awaiting. Tests and any code that needs to know
+	// when the plugin is fully torn down should `await plugin.unloadComplete`.
+	// Reset on each onload(); see W2 in the v10 Phase 0 plan.
+	public unloadComplete: Promise<void> = Promise.resolve();
+
 	// Notification manager (desktop)
 	notificationManager?: DesktopIntegrationManager;
 
@@ -1746,30 +1753,49 @@ export default class TaskProgressBarPlugin extends Plugin {
 	}
 
 	onunload() {
-		// Clean up global suggest manager
+		// Synchronous cleanup paths run immediately. Asynchronous cleanup
+		// (currently just dataflowOrchestrator.cleanup() which awaits Repository
+		// persistence) is gathered into a single promise exposed as
+		// `unloadComplete` so tests and any external observer can await full
+		// teardown. Obsidian itself never awaits this — its onunload signature
+		// is sync — but at least listeners + workers + persistence get a chance
+		// to settle before the next plugin lifecycle, instead of racing.
+		const asyncTasks: Array<Promise<void>> = [];
+
+		// Clean up global suggest manager (sync)
 		if (this.globalSuggestManager) {
 			this.globalSuggestManager.cleanup();
 		}
 
 		// Bases views are automatically unregistered by Obsidian when plugin unloads
 
-		// Clean up dataflow orchestrator (experimental)
+		// Clean up dataflow orchestrator (async — capture into asyncTasks)
 		if (this.dataflowOrchestrator) {
-			this.dataflowOrchestrator.cleanup().catch((error) => {
-				console.error(
-					"Error cleaning up dataflow orchestrator:",
-					error,
-				);
-			});
-			// Set to undefined to prevent any further access
+			const orch = this.dataflowOrchestrator;
+			// Null out immediately so any other code path that fires during
+			// teardown can't reach into a half-cleaned-up orchestrator.
 			this.dataflowOrchestrator = undefined;
+			asyncTasks.push(
+				orch.cleanup().catch((error) => {
+					console.error(
+						"Error cleaning up dataflow orchestrator:",
+						error,
+					);
+				}),
+			);
 		}
 
-		// Clean up MCP server manager (desktop only)
+		// Clean up MCP server manager (desktop only, sync)
 		if (this.mcpServerManager) {
 			this.mcpServerManager.cleanup();
 		}
+
 		// Task Genius Icon Manager cleanup is handled automatically by Component system
+
+		// Expose a promise so tests / external observers can know when async
+		// cleanup is fully done. Never rejects — individual catches above
+		// already log errors.
+		this.unloadComplete = Promise.all(asyncTasks).then(() => undefined);
 	}
 
 	/**

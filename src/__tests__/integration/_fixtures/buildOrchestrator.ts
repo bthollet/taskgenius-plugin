@@ -86,7 +86,17 @@ class EventBus {
 	on(name: string, handler: (...args: any[]) => void) {
 		if (!this.handlers.has(name)) this.handlers.set(name, new Set());
 		this.handlers.get(name)!.add(handler);
-		return { name, handler } as any;
+		// Return an EventRef-shaped object. Both `name`/`handler` (used by
+		// our offref()) AND a working `unload()` method (used by the obsidian
+		// mock's Component.unload to drain registered events) must be present.
+		const self = this;
+		return {
+			name,
+			handler,
+			unload() {
+				self.off(name, handler);
+			},
+		} as any;
 	}
 
 	off(name: string, handler: (...args: any[]) => void) {
