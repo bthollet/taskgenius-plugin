@@ -24,6 +24,7 @@ import { ConfigurableTaskParser } from "./core/ConfigurableTaskParser";
 import { MetadataParseMode } from "../types/TaskParserConfig";
 import { TimeParsingService } from "../services/time-parsing-service";
 import type { EnhancedTimeParsingConfig } from "../types/time-parsing";
+import { scopesForFields } from "./cache/scope-map";
 
 /**
  * DataflowOrchestrator - Coordinates all dataflow components
@@ -1763,7 +1764,12 @@ export class DataflowOrchestrator {
 	}
 
 	/**
-	 * Handle settings change
+	 * Handle settings change.
+	 *
+	 * Pass the cache scopes that the changed settings touch. Existing call
+	 * sites pass scope strings directly; new call sites should prefer
+	 * `onSettingsFieldsChanged()` (W4a) which derives scopes from a typed
+	 * field map.
 	 */
 	async onSettingsChange(scopes: string[]): Promise<void> {
 		// Clear relevant caches based on scope
@@ -1791,6 +1797,34 @@ export class DataflowOrchestrator {
 		if (scopes.some((s) => ["parser", "augment", "project"].includes(s))) {
 			await this.rebuild();
 		}
+	}
+
+	/**
+	 * Handle settings change by typed field path. Resolves the field paths to
+	 * cache scopes via `SETTINGS_FIELD_TO_SCOPES` and delegates to the
+	 * stringly-typed `onSettingsChange`.
+	 *
+	 * Phase 0 W4a — adds the typed entry point. Phase 1+ migrates existing
+	 * call sites away from raw scope strings as features are touched. The
+	 * primary value is centralizing "which fields invalidate which scopes"
+	 * so the migration can be mechanical.
+	 *
+	 * Field paths are dot-separated (e.g. "fileMetadataInheritance.inheritFromFrontmatter").
+	 * Unknown fields contribute no scopes (no cache impact).
+	 */
+	async onSettingsFieldsChanged(fields: readonly string[]): Promise<void> {
+		const scopes = scopesForFields(fields);
+		if (scopes.length === 0) {
+			// Nothing cache-affecting changed; still emit the change event so
+			// observers that don't care about scopes (e.g. UI refresh) can react.
+			emit(this.app, Events.SETTINGS_CHANGED, {
+				scopes: [],
+				fields,
+				timestamp: Date.now(),
+			});
+			return;
+		}
+		await this.onSettingsChange(scopes);
 	}
 
 	/**

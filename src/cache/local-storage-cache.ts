@@ -87,6 +87,13 @@ export class LocalStorageCache {
 	 * Load metadata for a file from cache
 	 * @param path File path to load
 	 * @returns Cached data or null if not found
+	 *
+	 * Phase 0 W4b: validates the wrapper's version against the current plugin
+	 * version. Prior to this fix, `storeFile` was tagging entries with
+	 * `currentVersion` but `loadFile` never checked it, so plugin upgrades did
+	 * NOT auto-invalidate stale cache entries — the inner Storage records had
+	 * their own version validation, but the outer wrapper layer's was dead
+	 * code. On mismatch we now treat the entry as a cache miss and remove it.
 	 */
 	public async loadFile<T = any>(path: string): Promise<Cached<T> | null> {
 		if (!this.initialized) await this.initialize();
@@ -94,12 +101,33 @@ export class LocalStorageCache {
 		try {
 			const key = this.fileKey(path);
 			const data = await this.persister.getItem<Cached<T>>(key);
+			if (data && data.version && data.version !== this.currentVersion) {
+				// Version mismatch — log once per session via _versionMismatchLogged
+				// to keep noise down on first load after an upgrade with thousands
+				// of cache entries.
+				if (!LocalStorageCache._versionMismatchLogged) {
+					console.log(
+						`[LocalStorageCache] Cache version mismatch (cached=${data.version}, current=${this.currentVersion}); treating as cache miss and pruning stale entries on access.`,
+					);
+					LocalStorageCache._versionMismatchLogged = true;
+				}
+				// Prune the stale entry so we don't keep paying the read cost.
+				try {
+					await this.persister.removeItem(key);
+				} catch {
+					/* best effort */
+				}
+				return null;
+			}
 			return data;
 		} catch (error) {
 			console.error(`Error loading cache for ${path}:`, error);
 			return null;
 		}
 	}
+
+	/** Process-wide flag so we only log version mismatch once per session. */
+	private static _versionMismatchLogged = false;
 
 	/**
 	 * Store metadata for a file in cache
