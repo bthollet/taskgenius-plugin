@@ -4,6 +4,17 @@ All notable changes to beta releases will be documented in this file.
 
 
 
+## [9.14.0-beta.5](///compare/9.14.0-beta.4...9.14.0-beta.5) (2026-06-28)
+
+### Features
+
+* **dataflow:** typed cache scope map + invariants checker (Phase 0 W4) fe4c976
+* **migration:** version-keyed MigrationRegistry with tombstones (Phase 0 W1) 12481c1
+
+### Bug Fixes
+
+* **dataflow:** close lifecycle and worker hazards (Phase 0 W2/W2-bis/W3) 1de55f4
+
 ## [9.14.0-beta.4](///compare/9.14.0-beta.3...9.14.0-beta.4) (2026-01-05)
 
 ### Features
