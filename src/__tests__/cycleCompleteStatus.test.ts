@@ -306,7 +306,7 @@ describe("handleCycleCompleteStatusTransaction (Integration)", () => {
 		expect(result).toBe(tr);
 	});
 
-	it("should cycle from [ ] to [/] based on default settings", () => {
+	it("should preserve user input when [ ] is manually changed to next mark [/]", () => {
 		const mockPlugin = createMockPlugin(); // Defaults: ' ', '/', 'x'
 		const tr = createMockTransaction({
 			startStateDocContent: "- [ ] Task",
@@ -320,22 +320,11 @@ describe("handleCycleCompleteStatusTransaction (Integration)", () => {
 			mockApp,
 			mockPlugin
 		);
-
-		expect(result).not.toBe(tr);
-		const changes = Array.isArray(result.changes)
-			? result.changes
-			: result.changes
-			? [result.changes]
-			: [];
-		expect(changes).toHaveLength(1);
-		const specChange = changes[0];
-		expect(specChange.from).toBe(3);
-		expect(specChange.to).toBe(4);
-		expect(specChange.insert).toBe("/"); // Cycle goes from ' ' (TODO) to '/' (IN_PROGRESS)
-		expect(result.annotations).toBe("taskStatusChange");
+		expect(result).toBe(tr);
+		expect(result.annotations).not.toBe("taskStatusChange");
 	});
 
-	it("should cycle from [/] to [x] based on default settings", () => {
+	it("should preserve user input when [/] is manually changed to next mark [x]", () => {
 		const mockPlugin = createMockPlugin(); // Defaults: ' ', '/', 'x'
 		const tr = createMockTransaction({
 			startStateDocContent: "- [/] Task",
@@ -349,22 +338,11 @@ describe("handleCycleCompleteStatusTransaction (Integration)", () => {
 			mockApp,
 			mockPlugin
 		);
-
-		expect(result).not.toBe(tr);
-		const changes = Array.isArray(result.changes)
-			? result.changes
-			: result.changes
-			? [result.changes]
-			: [];
-		expect(changes).toHaveLength(1);
-		const specChange = changes[0];
-		expect(specChange.from).toBe(3);
-		expect(specChange.to).toBe(4);
-		expect(specChange.insert).toBe("x"); // Cycle goes from '/' (IN_PROGRESS) to 'x' (DONE)
-		expect(result.annotations).toBe("taskStatusChange");
+		expect(result).toBe(tr);
+		expect(result.annotations).not.toBe("taskStatusChange");
 	});
 
-	it("should cycle from [x] back to [ ] based on default settings", () => {
+	it("should preserve user input when [x] is manually changed to next mark [ ]", () => {
 		const mockPlugin = createMockPlugin(); // Defaults: ' ', '/', 'x'
 		const tr = createMockTransaction({
 			startStateDocContent: "- [x] Task",
@@ -378,19 +356,8 @@ describe("handleCycleCompleteStatusTransaction (Integration)", () => {
 			mockApp,
 			mockPlugin
 		);
-
-		expect(result).not.toBe(tr);
-		const changes = Array.isArray(result.changes)
-			? result.changes
-			: result.changes
-			? [result.changes]
-			: [];
-		expect(changes).toHaveLength(1);
-		const specChange = changes[0];
-		expect(specChange.from).toBe(3);
-		expect(specChange.to).toBe(4);
-		expect(specChange.insert).toBe(" "); // Cycle goes from 'x' (DONE) back to ' ' (TODO)
-		expect(result.annotations).toBe("taskStatusChange");
+		expect(result).toBe(tr);
+		expect(result.annotations).not.toBe("taskStatusChange");
 	});
 
 	it("should respect custom cycle and marks", () => {
@@ -410,17 +377,8 @@ describe("handleCycleCompleteStatusTransaction (Integration)", () => {
 			mockApp,
 			mockPlugin
 		);
-
-		expect(result).not.toBe(tr);
-		const changes = Array.isArray(result.changes)
-			? result.changes
-			: result.changes
-			? [result.changes]
-			: [];
-		expect(changes).toHaveLength(1);
-		const specChange = changes[0];
-		expect(specChange.insert).toBe("r"); // Cycle b -> r
-		expect(result.annotations).toBe("taskStatusChange");
+		expect(result).toBe(tr);
+		expect(result.annotations).not.toBe("taskStatusChange");
 
 		// Test next step: r -> c
 		const tr2 = createMockTransaction({
@@ -435,16 +393,8 @@ describe("handleCycleCompleteStatusTransaction (Integration)", () => {
 			mockApp,
 			mockPlugin
 		);
-		expect(result2).not.toBe(tr2);
-		const changes2 = Array.isArray(result2.changes)
-			? result2.changes
-			: result2.changes
-			? [result2.changes]
-			: [];
-		expect(changes2).toHaveLength(1);
-		const specChange2 = changes2[0];
-		expect(specChange2.insert).toBe("c"); // Cycle r -> c
-		expect(result2.annotations).toBe("taskStatusChange");
+		expect(result2).toBe(tr2);
+		expect(result2.annotations).not.toBe("taskStatusChange");
 
 		// Test wrap around: c -> b
 		const tr3 = createMockTransaction({
@@ -459,16 +409,8 @@ describe("handleCycleCompleteStatusTransaction (Integration)", () => {
 			mockApp,
 			mockPlugin
 		);
-		expect(result3).not.toBe(tr3);
-		const changes3 = Array.isArray(result3.changes)
-			? result3.changes
-			: result3.changes
-			? [result3.changes]
-			: [];
-		expect(changes3).toHaveLength(1);
-		const specChange3 = changes3[0];
-		expect(specChange3.insert).toBe("b"); // Cycle c -> b
-		expect(result3.annotations).toBe("taskStatusChange");
+		expect(result3).toBe(tr3);
+		expect(result3.annotations).not.toBe("taskStatusChange");
 	});
 
 	it("should skip excluded marks in the cycle", () => {
@@ -496,15 +438,8 @@ describe("handleCycleCompleteStatusTransaction (Integration)", () => {
 			mockApp,
 			mockPlugin
 		);
-		expect(result).not.toBe(tr);
-		const changes = Array.isArray(result.changes)
-			? result.changes
-			: result.changes
-			? [result.changes]
-			: [];
-		expect(changes).toHaveLength(1);
-		expect(changes[0].insert).toBe("/"); // Should go ' ' -> '/'
-		expect(result.annotations).toBe("taskStatusChange");
+		expect(result).toBe(tr);
+		expect(result.annotations).not.toBe("taskStatusChange");
 
 		// Test IN_PROGRESS -> DONE
 		const tr2 = createMockTransaction({
@@ -519,15 +454,8 @@ describe("handleCycleCompleteStatusTransaction (Integration)", () => {
 			mockApp,
 			mockPlugin
 		);
-		expect(result2).not.toBe(tr2);
-		const changes2 = Array.isArray(result2.changes)
-			? result2.changes
-			: result2.changes
-			? [result2.changes]
-			: [];
-		expect(changes2).toHaveLength(1);
-		expect(changes2[0].insert).toBe("x"); // Should go '/' -> 'x'
-		expect(result2.annotations).toBe("taskStatusChange");
+		expect(result2).toBe(tr2);
+		expect(result2.annotations).not.toBe("taskStatusChange");
 
 		// Test DONE -> TODO (wrap around, skipping WAITING)
 		const tr3 = createMockTransaction({
@@ -542,18 +470,11 @@ describe("handleCycleCompleteStatusTransaction (Integration)", () => {
 			mockApp,
 			mockPlugin
 		);
-		expect(result3).not.toBe(tr3);
-		const changes3 = Array.isArray(result3.changes)
-			? result3.changes
-			: result3.changes
-			? [result3.changes]
-			: [];
-		expect(changes3).toHaveLength(1);
-		expect(changes3[0].insert).toBe(" "); // Should go 'x' -> ' '
-		expect(result3.annotations).toBe("taskStatusChange");
+		expect(result3).toBe(tr3);
+		expect(result3.annotations).not.toBe("taskStatusChange");
 	});
 
-	it("should handle unknown starting mark by cycling to the first status", () => {
+	it("should not cycle an unknown starting mark when user input is a valid status", () => {
 		const mockPlugin = createMockPlugin(); // Defaults: ' ', '/', 'x'
 		const tr = createMockTransaction({
 			startStateDocContent: "- [?] Task", // Unknown status
@@ -567,15 +488,8 @@ describe("handleCycleCompleteStatusTransaction (Integration)", () => {
 			mockApp,
 			mockPlugin
 		);
-		expect(result).not.toBe(tr);
-		const changes = Array.isArray(result.changes)
-			? result.changes
-			: result.changes
-			? [result.changes]
-			: [];
-		expect(changes).toHaveLength(1);
-		expect(changes[0].insert).toBe("/"); // Based on actual behavior, it inserts what the user typed
-		expect(result.annotations).toBe("taskStatusChange");
+		expect(result).toBe(tr);
+		expect(result.annotations).not.toBe("taskStatusChange");
 	});
 
 	it("should NOT cycle if the inserted mark matches the next mark in sequence", () => {
@@ -608,15 +522,8 @@ describe("handleCycleCompleteStatusTransaction (Integration)", () => {
 			mockApp,
 			mockPlugin
 		);
-		expect(result).not.toBe(tr);
-		const changes = Array.isArray(result.changes)
-			? result.changes
-			: result.changes
-			? [result.changes]
-			: [];
-		expect(changes).toHaveLength(1);
-		expect(changes[0].insert).toBe("/");
-		expect(result.annotations).toBe("taskStatusChange");
+		expect(result).toBe(tr);
+		expect(result.annotations).not.toBe("taskStatusChange");
 	});
 
 	it("should NOT cycle newly created empty tasks [- [ ]]", () => {
@@ -916,7 +823,7 @@ describe("handleCycleCompleteStatusTransaction (Integration)", () => {
 		expect(result).toBe(tr);
 	});
 
-	it("should cycle task status when user selects and replaces the 'x' mark with any character", () => {
+	it("should ignore invalid replacements of the 'x' mark", () => {
 		const mockPlugin = createMockPlugin(); // Defaults: ' ', '/', 'x'
 
 		// Test replacing 'x' with 'a' (any character)
@@ -932,70 +839,11 @@ describe("handleCycleCompleteStatusTransaction (Integration)", () => {
 			mockApp,
 			mockPlugin
 		);
-		expect(result1).not.toBe(tr1);
-		const changes1 = Array.isArray(result1.changes)
-			? result1.changes
-			: result1.changes
-			? [result1.changes]
-			: [];
-		expect(changes1).toHaveLength(1);
-		expect(changes1[0].from).toBe(3);
-		expect(changes1[0].to).toBe(4);
-		expect(changes1[0].insert).toBe(" "); // Should cycle from 'x' to ' ' (next in cycle)
-		expect(result1.annotations).toBe("taskStatusChange");
-
-		// Test replacing 'x' with '1' (number)
-		const tr2 = createMockTransaction({
-			startStateDocContent: "- [x] Task",
-			newDocContent: "- [1] Task",
-			changes: [
-				{ fromA: 3, toA: 4, fromB: 3, toB: 4, insertedText: "1" },
-			],
-		});
-		const result2 = handleCycleCompleteStatusTransaction(
-			tr2,
-			mockApp,
-			mockPlugin
-		);
-		expect(result2).not.toBe(tr2);
-		const changes2 = Array.isArray(result2.changes)
-			? result2.changes
-			: result2.changes
-			? [result2.changes]
-			: [];
-		expect(changes2).toHaveLength(1);
-		expect(changes2[0].from).toBe(3);
-		expect(changes2[0].to).toBe(4);
-		expect(changes2[0].insert).toBe(" "); // Should cycle from 'x' to ' ' (next in cycle)
-		expect(result2.annotations).toBe("taskStatusChange");
-
-		// Test replacing 'x' with '!' (special character)
-		const tr3 = createMockTransaction({
-			startStateDocContent: "- [x] Task",
-			newDocContent: "- [!] Task",
-			changes: [
-				{ fromA: 3, toA: 4, fromB: 3, toB: 4, insertedText: "!" },
-			],
-		});
-		const result3 = handleCycleCompleteStatusTransaction(
-			tr3,
-			mockApp,
-			mockPlugin
-		);
-		expect(result3).not.toBe(tr3);
-		const changes3 = Array.isArray(result3.changes)
-			? result3.changes
-			: result3.changes
-			? [result3.changes]
-			: [];
-		expect(changes3).toHaveLength(1);
-		expect(changes3[0].from).toBe(3);
-		expect(changes3[0].to).toBe(4);
-		expect(changes3[0].insert).toBe(" "); // Should cycle from 'x' to ' ' (next in cycle)
-		expect(result3.annotations).toBe("taskStatusChange");
+		expect(result1).toBe(tr1);
+		expect(result1.annotations).not.toBe("taskStatusChange");
 	});
 
-	it("should cycle task status when user selects and replaces any mark with any character", () => {
+	it("should ignore invalid replacements of task marks", () => {
 		const mockPlugin = createMockPlugin(); // Defaults: ' ', '/', 'x'
 
 		// Test replacing ' ' (space) with 'z'
@@ -1011,45 +859,11 @@ describe("handleCycleCompleteStatusTransaction (Integration)", () => {
 			mockApp,
 			mockPlugin
 		);
-		expect(result1).not.toBe(tr1);
-		const changes1 = Array.isArray(result1.changes)
-			? result1.changes
-			: result1.changes
-			? [result1.changes]
-			: [];
-		expect(changes1).toHaveLength(1);
-		expect(changes1[0].from).toBe(3);
-		expect(changes1[0].to).toBe(4);
-		expect(changes1[0].insert).toBe("/"); // Should cycle from ' ' to '/' (next in cycle)
-		expect(result1.annotations).toBe("taskStatusChange");
-
-		// Test replacing '/' with 'q'
-		const tr2 = createMockTransaction({
-			startStateDocContent: "- [/] Task",
-			newDocContent: "- [q] Task",
-			changes: [
-				{ fromA: 3, toA: 4, fromB: 3, toB: 4, insertedText: "q" },
-			],
-		});
-		const result2 = handleCycleCompleteStatusTransaction(
-			tr2,
-			mockApp,
-			mockPlugin
-		);
-		expect(result2).not.toBe(tr2);
-		const changes2 = Array.isArray(result2.changes)
-			? result2.changes
-			: result2.changes
-			? [result2.changes]
-			: [];
-		expect(changes2).toHaveLength(1);
-		expect(changes2[0].from).toBe(3);
-		expect(changes2[0].to).toBe(4);
-		expect(changes2[0].insert).toBe("x"); // Should cycle from '/' to 'x' (next in cycle)
-		expect(result2.annotations).toBe("taskStatusChange");
+		expect(result1).toBe(tr1);
+		expect(result1.annotations).not.toBe("taskStatusChange");
 	});
 
-	it("should correctly detect the original mark in replacement operations", () => {
+	it("should reject invalid replacement operations", () => {
 		const mockPlugin = createMockPlugin(); // Defaults: ' ', '/', 'x'
 
 		// Test the specific case where user selects 'x' and replaces it with 'a'
@@ -1064,12 +878,7 @@ describe("handleCycleCompleteStatusTransaction (Integration)", () => {
 
 		// First, let's test what findTaskStatusChanges returns
 		const taskChanges = findTaskStatusChanges(tr, false, mockPlugin);
-		expect(taskChanges).toHaveLength(1);
-
-		// The currentMark should be 'x' (the original mark that was replaced)
-		// NOT 'a' (the new mark that was typed)
-		expect(taskChanges[0].currentMark).toBe("x");
-		expect(taskChanges[0].position).toBe(3);
+		expect(taskChanges).toHaveLength(0);
 
 		// Now test the full cycle behavior
 		const result = handleCycleCompleteStatusTransaction(
@@ -1077,20 +886,11 @@ describe("handleCycleCompleteStatusTransaction (Integration)", () => {
 			mockApp,
 			mockPlugin
 		);
-		expect(result).not.toBe(tr);
-		const changes = Array.isArray(result.changes)
-			? result.changes
-			: result.changes
-			? [result.changes]
-			: [];
-		expect(changes).toHaveLength(1);
-		expect(changes[0].from).toBe(3);
-		expect(changes[0].to).toBe(4);
-		expect(changes[0].insert).toBe(" "); // Should cycle from 'x' to ' ' (next in cycle)
-		expect(result.annotations).toBe("taskStatusChange");
+		expect(result).toBe(tr);
+		expect(result.annotations).not.toBe("taskStatusChange");
 	});
 
-	it("should handle replacement operations where fromA != toA", () => {
+	it("should reject invalid replacement operations where fromA != toA", () => {
 		const mockPlugin = createMockPlugin(); // Defaults: ' ', '/', 'x'
 
 		// Test replacement operation: user selects 'x' and types 'z'
@@ -1105,24 +905,15 @@ describe("handleCycleCompleteStatusTransaction (Integration)", () => {
 
 		// Verify that this is detected as a task status change
 		const taskChanges = findTaskStatusChanges(tr, false, mockPlugin);
-		expect(taskChanges).toHaveLength(1);
-		expect(taskChanges[0].currentMark).toBe("x"); // Original mark before replacement
-		expect(taskChanges[0].wasCompleteTask).toBe(true);
+		expect(taskChanges).toHaveLength(0);
 
-		// Verify the cycling behavior
+		// Verify no synthetic cycling behavior
 		const result = handleCycleCompleteStatusTransaction(
 			tr,
 			mockApp,
 			mockPlugin
 		);
-		expect(result).not.toBe(tr);
-		const changes = Array.isArray(result.changes)
-			? result.changes
-			: result.changes
-			? [result.changes]
-			: [];
-		expect(changes).toHaveLength(1);
-		expect(changes[0].insert).toBe(" "); // Should cycle from 'x' to ' '
+		expect(result).toBe(tr);
 	});
 
 	it("should debug replacement with space character specifically", () => {
@@ -1174,9 +965,10 @@ describe("handleCycleCompleteStatusTransaction (Integration)", () => {
 			}
 		}
 
-		// For now, let's just verify it's detected as a change
+		// Replacing x with the next mark space is a valid status change, but should not synthesize another cycle.
 		expect(taskChanges).toHaveLength(1);
-		expect(taskChanges[0].currentMark).toBe("x"); // Should detect original 'x'
+		expect(taskChanges[0].currentMark).toBe("x");
+		expect(result).toBe(tr);
 	});
 
 	it("should test different replacement scenarios to identify the trigger", () => {
@@ -1258,11 +1050,29 @@ describe("handleCycleCompleteStatusTransaction (Integration)", () => {
 		console.log("Test 4 ( ->x): taskChanges length:", taskChanges4.length);
 		console.log("Test 4 ( ->x): result changed:", result4 !== tr4);
 
-		// All should be detected as task changes
-		expect(taskChanges1).toHaveLength(1);
+		// Invalid arbitrary replacements are ignored; valid direct next-cycle replacements are detected but not cycled again.
+		expect(taskChanges1).toHaveLength(0);
+		expect(result1).toBe(tr1);
 		expect(taskChanges2).toHaveLength(1);
+		expect(result2).toBe(tr2);
 		expect(taskChanges3).toHaveLength(1);
+		expect(result3).not.toBe(tr3);
+		const result3Changes = Array.isArray(result3.changes)
+			? result3.changes
+			: result3.changes
+			? [result3.changes]
+			: [];
+		expect(result3Changes).toHaveLength(1);
+		expect(result3Changes[0].insert).toBe("x");
 		expect(taskChanges4).toHaveLength(1);
+		expect(result4).not.toBe(tr4);
+		const result4Changes = Array.isArray(result4.changes)
+			? result4.changes
+			: result4.changes
+			? [result4.changes]
+			: [];
+		expect(result4Changes).toHaveLength(1);
+		expect(result4Changes[0].insert).toBe("/");
 	});
 
 	it("should identify the exact problem: when user input matches next cycle state", () => {

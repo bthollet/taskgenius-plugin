@@ -6,6 +6,10 @@
 import { TFile, CachedMetadata } from "obsidian";
 import { StandardFileTaskMetadata, Task } from "../types/task";
 import { FileParsingConfiguration, ProjectDetectionMethod } from "../common/setting-definition";
+import {
+	getPrimaryCompletedStatusMark,
+	isCompletedStatusMark,
+} from "../modules/view-tasks/completedStatusPredicate";
 
 export interface FileTaskParsingResult {
 	tasks: Task[];
@@ -15,10 +19,16 @@ export interface FileTaskParsingResult {
 export class FileMetadataTaskParser {
 	private config: FileParsingConfiguration;
 	private projectDetectionMethods?: ProjectDetectionMethod[];
+	private taskStatuses?: Record<string, string | undefined>;
 
-	constructor(config: FileParsingConfiguration, projectDetectionMethods?: ProjectDetectionMethod[]) {
+	constructor(
+		config: FileParsingConfiguration,
+		projectDetectionMethods?: ProjectDetectionMethod[],
+		taskStatuses?: Record<string, string | undefined>
+	) {
 		this.config = config;
 		this.projectDetectionMethods = projectDetectionMethods;
+		this.taskStatuses = taskStatuses;
 	}
 
 	/**
@@ -167,7 +177,7 @@ export class FileMetadataTaskParser {
 
 		// Determine task status based on field value and name
 		const status = this.determineTaskStatus(fieldName, fieldValue);
-		const completed = status.toLowerCase() === "x";
+		const completed = isCompletedStatusMark(status, this.taskStatuses);
 
 		// Extract additional metadata
 		const metadata = this.extractTaskMetadata(
@@ -221,7 +231,7 @@ export class FileMetadataTaskParser {
 
 		// Use default task status
 		const status = this.config.defaultTaskStatus;
-		const completed = status.toLowerCase() === "x";
+		const completed = isCompletedStatusMark(status, this.taskStatuses);
 
 		// Extract additional metadata
 		const metadata = this.extractTaskMetadata(
@@ -279,7 +289,7 @@ export class FileMetadataTaskParser {
 			fieldName.toLowerCase().includes("complete") ||
 			fieldName.toLowerCase().includes("done")
 		) {
-			return fieldValue ? "x" : " ";
+			return fieldValue ? this.getBooleanCompletedStatusMark() : " ";
 		}
 
 		// If field name suggests todo/task
@@ -289,7 +299,7 @@ export class FileMetadataTaskParser {
 		) {
 			// If it's a boolean, use it to determine status
 			if (typeof fieldValue === "boolean") {
-				return fieldValue ? "x" : " ";
+				return fieldValue ? this.getBooleanCompletedStatusMark() : " ";
 			}
 			// If it's a string that looks like a status
 			if (typeof fieldValue === "string" && fieldValue.length === 1) {
@@ -304,6 +314,10 @@ export class FileMetadataTaskParser {
 
 		// Default to configured default status
 		return this.config.defaultTaskStatus;
+	}
+
+	private getBooleanCompletedStatusMark(): string {
+		return getPrimaryCompletedStatusMark(this.taskStatuses);
 	}
 
 	/**

@@ -40,21 +40,9 @@ describe("autoDateManager - Real World Test", () => {
 			"cancelled"
 		);
 		
-		// Use throw to output debug info
-		throw new Error(`
-DEBUG INFO:
-- Line: ${lineText}
-- Position: ${position}
-- Text before: "${lineText.substring(0, position)}"
-- Text after: "${lineText.substring(position)}"
-- Character at position: "${lineText[position]}"
-- Block ref index: ${lineText.indexOf("^timer")}
-`);
-		
 		// The cancelled date should be inserted after 🛫 2025-04-20 but before ^timer
 		const expectedPosition = lineText.indexOf(" ^timer");
-		console.log("\nExpected position:", expectedPosition);
-		console.log("Expected text after:", lineText.substring(expectedPosition));
+		expect(position).toBe(expectedPosition);
 		
 		// Simulate insertion
 		const cancelledDate = " ❌ 2025-07-31";
@@ -96,6 +84,6 @@ DEBUG INFO:
 		
 		// Should be after the date but before block ref
 		expect(position).toBeLessThan(lineText.indexOf("^block"));
-		expect(position).toBeGreaterThan(lineText.indexOf("2025-04-20") + "2025-04-20".length);
+		expect(position).toBe(lineText.indexOf("2025-04-20") + "2025-04-20".length);
 	});
 });

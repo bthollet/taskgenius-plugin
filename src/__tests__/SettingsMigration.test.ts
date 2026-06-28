@@ -14,8 +14,20 @@ describe('Settings Migration', () => {
   let testSettings: TaskProgressBarSettings;
 
   beforeEach(() => {
-    // Create a copy of default settings for testing
+    // Create a copy of default settings for testing. JSON cloning strips RegExp
+    // instances from DEFAULT_SETTINGS.timeParsing.timePatterns, so restore that
+    // branch from the real defaults for no-op migration scenarios.
     testSettings = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
+    testSettings.timeParsing = {
+      ...DEFAULT_SETTINGS.timeParsing,
+      timePatterns: {
+        ...DEFAULT_SETTINGS.timeParsing.timePatterns,
+        singleTime: [...DEFAULT_SETTINGS.timeParsing.timePatterns.singleTime],
+        timeRange: [...DEFAULT_SETTINGS.timeParsing.timePatterns.timeRange],
+        rangeSeparators: [...DEFAULT_SETTINGS.timeParsing.timePatterns.rangeSeparators],
+      },
+      timeDefaults: { ...DEFAULT_SETTINGS.timeParsing.timeDefaults },
+    };
   });
 
   describe('hasSettingsDuplicates', () => {
@@ -168,11 +180,18 @@ describe('Settings Migration', () => {
     });
 
     it('should not run cleanup if migration fails', () => {
-      // No migration needed
+      // No migration needed; keep time parsing defaults valid because JSON cloning
+      // would otherwise strip RegExp instances and trigger a timeParsing migration.
+      testSettings.fileParsingConfig.enableWorkerProcessing = false;
       const result = runAllMigrations(testSettings);
       
       expect(result.migrated).toBe(false);
-      expect(result.details.length).toBeLessThanOrEqual(1); // Only project config detail
+      expect(result.details).toEqual(expect.arrayContaining([
+        'Project configuration uses projectConfig for enhanced features',
+        'Migrated: Default task status',
+        'Migrated: Task content source',
+      ]));
+      expect(result.details).not.toContain('Disabled deprecated: Enable file metadata parsing');
     });
   });
 

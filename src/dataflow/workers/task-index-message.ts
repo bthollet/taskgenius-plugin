@@ -40,6 +40,9 @@ export interface ParseTasksCommand {
 		dailyNotePath: string;
 		ignoreHeading: string;
 		focusHeading: string;
+
+		// Task status settings for completed/custom aliases
+		taskStatuses?: Record<string, string | undefined>;
 		fileParsingConfig?: FileParsingConfiguration;
 		// Tag prefix configurations (optional)
 		projectTagPrefix?: Record<MetadataFormat, string>;
@@ -80,6 +83,8 @@ export interface BatchIndexCommand {
 		ignoreHeading: string;
 		focusHeading: string;
 		fileParsingConfig?: FileParsingConfiguration;
+			/** Task status settings for completed/custom aliases */
+			taskStatuses?: Record<string, string | undefined>;
 		// Tag prefix configurations (optional)
 		projectTagPrefix?: Record<MetadataFormat, string>;
 		contextTagPrefix?: Record<MetadataFormat, string>;
@@ -185,6 +190,9 @@ export type TaskWorkerSettings = {
 	dailyNotePath: string;
 	ignoreHeading: string;
 	focusHeading: string;
+
+	// Task status settings for completed/custom aliases
+	taskStatuses?: Record<string, string | undefined>;
 
 	// Tag prefix configurations
 	projectTagPrefix?: Record<MetadataFormat, string>;

@@ -1,9 +1,17 @@
+const localMetadataPathIgnorePatterns = [
+	"<rootDir>/.conductor/",
+	"<rootDir>/.boncli/",
+	"<rootDir>/.rebon/",
+];
+
 module.exports = {
 	preset: "ts-jest",
 	testEnvironment: "jsdom",
+	roots: ["<rootDir>/src"],
 	testMatch: ["**/__tests__/**/*.test.ts"],
-	testPathIgnorePatterns: ["<rootDir>/.conductor/"],
-	modulePathIgnorePatterns: ["<rootDir>/.conductor/"],
+	testPathIgnorePatterns: localMetadataPathIgnorePatterns,
+	modulePathIgnorePatterns: localMetadataPathIgnorePatterns,
+	watchPathIgnorePatterns: localMetadataPathIgnorePatterns,
 	moduleNameMapper: {
 		"^obsidian$": "<rootDir>/src/__mocks__/obsidian.ts",
 		"^moment$": "<rootDir>/src/__mocks__/moment.js",

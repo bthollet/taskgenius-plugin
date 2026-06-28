@@ -23,6 +23,8 @@ import {
 	getAllStatusMarks,
 } from "@/utils/status-cycle-resolver";
 import { TaskTimerManager } from "@/managers/timer-manager";
+import { isCompletedStatusMark } from "@/modules/view-tasks/completedStatusPredicate";
+import { getTimerStartDecision } from "@/modules/view-tasks/timerStartDecision";
 
 /**
  * FluentActionHandlers - Handles all user actions and task operations
@@ -722,6 +724,16 @@ export class FluentActionHandlers extends Component {
 	 */
 	private async startTimerForTask(task: Task): Promise<void> {
 		try {
+			const timerStartDecision = getTimerStartDecision(
+				task,
+				this.plugin.settings.taskStatuses
+			);
+
+			if (!timerStartDecision.allowed) {
+				new Notice(t("Cannot start timer for closed task"));
+				return;
+			}
+
 			const timerManager = new TaskTimerManager(
 				this.plugin.settings.taskTimer
 			);
@@ -756,14 +768,14 @@ export class FluentActionHandlers extends Component {
 			const inProgressMarks = (
 				this.plugin.settings.taskStatuses.inProgress || ">|/"
 			).split("|");
-			const completedMarks = (
-				this.plugin.settings.taskStatuses.completed || "x|X"
-			).split("|");
+			const taskStatus = task.status || " ";
+			const isCompletedByStatus = this.isCompletedMark(taskStatus);
 
 			// Only change status if not completed and not already in progress
 			if (
 				!task.completed &&
-				!inProgressMarks.includes(task.status || " ")
+				!isCompletedByStatus &&
+				!inProgressMarks.includes(taskStatus)
 			) {
 				const inProgressMark = inProgressMarks[0] || "/";
 				const statusUpdatedTask: Task = {
@@ -1144,20 +1156,7 @@ export class FluentActionHandlers extends Component {
 	 * Check if a status mark indicates completion
 	 */
 	private isCompletedMark(mark: string): boolean {
-		if (!mark) return false;
-		try {
-			const lower = mark.toLowerCase();
-			const completedCfg = String(
-				this.plugin.settings.taskStatuses?.completed || "x"
-			);
-			const completedSet = completedCfg
-				.split("|")
-				.map((s) => s.trim().toLowerCase())
-				.filter(Boolean);
-			return completedSet.includes(lower);
-		} catch (_) {
-			return false;
-		}
+		return isCompletedStatusMark(mark, this.plugin.settings.taskStatuses);
 	}
 
 	/**

@@ -491,6 +491,39 @@ description: A project defined in content
 			);
 			expect(project).toBeUndefined();
 		});
+
+		it("should not apply default naming when caller opts out (applyDefaultNaming: false)", async () => {
+			// Even with default naming enabled, the inline-task dataflow path opts
+			// out so files containing inline tasks are NOT each turned into their
+			// own filename-project (which collapses the Projects view into one
+			// task per project and empties the Inbox). This keeps the main-thread
+			// path in sync with ProjectData.worker, which omits the fallback.
+			const defaultProjectNaming: ProjectNamingStrategy = {
+				strategy: "filename",
+				stripExtension: true,
+				enabled: true,
+			};
+
+			manager.updateOptions({ defaultProjectNaming });
+
+			const optedOut = await manager.determineTgProject(
+				"Projects/my-document.md",
+				{ applyDefaultNaming: false },
+			);
+			expect(optedOut).toBeUndefined();
+
+			// The public API / File Source default (applyDefaultNaming: true) still
+			// applies naming, so existing behavior is preserved.
+			const applied = await manager.determineTgProject(
+				"Projects/my-document.md",
+			);
+			expect(applied).toEqual({
+				type: "default",
+				name: "my-document",
+				source: "filename",
+				readonly: true,
+			});
+		});
 	});
 
 	describe("Priority order", () => {

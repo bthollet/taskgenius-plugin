@@ -493,7 +493,11 @@ export class ProjectDataWorkerManager {
 	): Promise<CachedProjectData | null> {
 		try {
 			const tgProject =
-				await this.projectConfigManager.determineTgProject(filePath);
+				await this.projectConfigManager.determineTgProject(filePath, {
+					// Sync fallback must mirror ProjectData.worker, which does not
+					// apply default project naming for inline-task files.
+					applyDefaultNaming: false,
+				});
 			const enhancedMetadata =
 				await this.projectConfigManager.getEnhancedMetadata(filePath);
 

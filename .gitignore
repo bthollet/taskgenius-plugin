@@ -55,3 +55,13 @@ packages/*/node_modules
 docs-site
 PLAN.md
 .caret
+
+issues*
+*issues.js
+.ace-tool/
+
+# rtk (Rust Token Killer) tool cache
+.rebon/
+
+# stray temp files accidentally written into the repo
+*tmp_index_diff.txt

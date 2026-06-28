@@ -86,19 +86,6 @@ export class TaskRendererComponent extends Component {
 			return;
 		}
 
-		console.log(
-			"TaskRenderer received tasks:",
-			JSON.stringify(
-				this.params.preparedTasks.map((t) => ({
-					id: t.task.id,
-					sx: t.startX,
-					w: t.width,
-				})),
-				null,
-				2
-			)
-		);
-
 		// Clean up previous render's resources before re-rendering
 		this.cleanupEventListeners();
 		this.taskGroupEl.empty(); // Clear previous tasks and their components

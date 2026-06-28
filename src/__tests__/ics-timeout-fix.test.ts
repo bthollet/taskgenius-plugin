@@ -5,6 +5,7 @@
 
 import { IcsManager } from "../managers/ics-manager";
 import { IcsManagerConfig } from "../types/ics";
+import { requestUrl } from "obsidian";
 
 // Mock moment.js
 jest.mock("moment", () => {
@@ -14,15 +15,18 @@ jest.mock("moment", () => {
 });
 
 // Mock translation manager
-jest.mock("../translations/manager", () => ({
-	TranslationManager: {
-		getInstance: () => ({
-			t: (key: string) => key,
-			setLocale: jest.fn(),
-			getCurrentLocale: () => "en",
-		}),
-	},
-}));
+jest.mock("../translations/manager", () => {
+	const translationManager = {
+		t: jest.fn((key: string) => key),
+		setLocale: jest.fn(),
+		getCurrentLocale: jest.fn(() => "en"),
+	};
+
+	return {
+		translationManager,
+		t: translationManager.t,
+	};
+});
 
 // Mock minimal settings for testing
 const mockSettings = {
@@ -85,6 +89,18 @@ describe("ICS Timeout Fix", () => {
 	};
 
 	beforeEach(async () => {
+		const mockRequestUrl = requestUrl as unknown as {
+			mockImplementation: (implementation: () => Promise<unknown>) => void;
+		};
+		mockRequestUrl.mockImplementation(
+			() =>
+				new Promise((resolve) => {
+					setTimeout(
+						() => resolve({ status: 200, text: "", headers: {} }),
+						35000,
+					);
+				}),
+		);
 		mockComponent = new MockComponent();
 		icsManager = new IcsManager(testConfig, mockSettings, {} as any);
 		await icsManager.initialize();

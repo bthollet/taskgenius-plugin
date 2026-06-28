@@ -64,6 +64,7 @@ export interface WorkerPoolOptions {
 		fileMetadataInheritance?: FileMetadataInheritanceConfig;
 		enableCustomDateFormats?: boolean;
 		customDateFormats?: string[];
+		taskStatuses?: Record<string, string | undefined>;
 		// Tag prefix configurations (optional)
 		projectTagPrefix?: Record<string, string>;
 		contextTagPrefix?: Record<string, string>;
@@ -259,7 +260,8 @@ export class TaskWorkerManager extends Component {
 		) {
 			this.fileMetadataParser = new FileMetadataTaskParser(
 				config,
-				projectDetectionMethods
+				projectDetectionMethods,
+				this.options.settings?.taskStatuses
 			);
 		} else {
 			this.fileMetadataParser = undefined;
@@ -279,6 +281,7 @@ export class TaskWorkerManager extends Component {
 				focusHeading: "",
 				fileParsingConfig: config,
 				fileMetadataInheritance: undefined,
+				taskStatuses: undefined,
 			};
 		}
 	}
@@ -774,6 +777,7 @@ export class TaskWorkerManager extends Component {
 							dailyNotePath: "",
 							ignoreHeading: "",
 							focusHeading: "",
+							taskStatuses: undefined,
 							fileParsingConfig: undefined,
 							fileMetadataInheritance: undefined,
 						},
@@ -1147,6 +1151,7 @@ export class TaskWorkerManager extends Component {
 		settings: Partial<{
 			preferMetadataFormat: "dataview" | "tasks";
 			customDateFormats?: string[];
+			taskStatuses?: Record<string, string | undefined>;
 			fileMetadataInheritance?: any;
 			projectConfig?: any;
 			ignoreHeading?: string;

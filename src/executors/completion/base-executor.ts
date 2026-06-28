@@ -112,12 +112,13 @@ export abstract class BaseActionExecutor {
 	protected getCanvasTaskUpdater(
 		context: OnCompletionExecutionContext,
 	): CanvasTaskUpdater {
-		// Prefer using the plugin's task manager if available (allows mocking in tests)
 		const plugin = context.plugin as TaskProgressBarPlugin;
-		if (plugin?.writeAPI) {
-			return plugin.writeAPI.canvasTaskUpdater;
+		const canvasTaskUpdater = plugin?.writeAPI?.canvasTaskUpdater;
+
+		if (!canvasTaskUpdater) {
+			throw new Error("CanvasTaskUpdater is not available");
 		}
 
-		return new CanvasTaskUpdater(context.app.vault, context.plugin);
+		return canvasTaskUpdater;
 	}
 }

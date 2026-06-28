@@ -13,6 +13,7 @@ import { Task } from "@/types/task";
 import { t } from "@/translations/helper";
 import { Events, on } from "@/dataflow/events/Events";
 import { SettingsModal } from "@/components/features/settings/SettingsModal";
+import { isClosedStatusMark } from "@/modules/view-tasks/closedStatusPredicate";
 
 export type ViewMode = "list" | "kanban" | "tree" | "calendar";
 
@@ -21,23 +22,6 @@ export interface CustomNavButton {
 	icon: string;
 	tooltip: string;
 	onClick: () => void;
-}
-
-export function isCompletedMark(
-	plugin: TaskProgressBarPlugin,
-	mark: string,
-): boolean {
-	if (!mark) return false;
-	try {
-		const lower = mark.toLowerCase();
-		const completedCfg =
-			String(plugin.settings.taskStatuses?.completed || "x") +
-			"|" +
-			(plugin.settings.taskStatuses?.abandoned || "-");
-		return completedCfg.split("|").includes(lower);
-	} catch (_) {
-		return false;
-	}
 }
 
 export class TopNavigation extends Component {
@@ -115,8 +99,11 @@ export class TopNavigation extends Component {
 		// Exclude completed tasks
 		if (task.completed) return false;
 
-		// Exclude abandoned/completed status tasks
-		if (task.status && isCompletedMark(this.plugin, task.status))
+		// Exclude closed status tasks (completed or abandoned)
+		if (
+			task.status &&
+			isClosedStatusMark(task.status, this.plugin.settings.taskStatuses)
+		)
 			return false;
 
 		// Only include tasks with dueDate or scheduledDate

@@ -225,56 +225,108 @@ export class FuzzyMatch<T> {
 }
 
 // Mock moment function and its methods
-function momentFn(input?: any) {
-	// Parse the input to a Date object
-	let date: Date;
-	if (input instanceof Date) {
-		date = input;
-	} else if (typeof input === "string") {
-		date = new Date(input);
-	} else if (typeof input === "number") {
-		date = new Date(input);
-	} else {
-		date = new Date();
-	}
+function momentFn(input?: any, format?: string, strict?: boolean) {
+	const normalizeInput = (value?: any): Date => {
+		if (value && value._date instanceof Date) {
+			return new Date(value._date.getTime());
+		}
+		if (value instanceof Date) {
+			return new Date(value.getTime());
+		}
+		if (typeof value === "number") {
+			return new Date(value);
+		}
+		if (typeof value === "string") {
+			const dateTimeMatch = value.match(
+				/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/
+			);
+			if (dateTimeMatch) {
+				const [, year, month, day, hour = "0", minute = "0", second = "0"] =
+					dateTimeMatch;
+				return new Date(
+					Number(year),
+					Number(month) - 1,
+					Number(day),
+					Number(hour),
+					Number(minute),
+					Number(second)
+				);
+			}
+			return new Date(value);
+		}
+		return new Date();
+	};
+
+	let date: Date = normalizeInput(input);
+	const pad = (value: number) => value.toString().padStart(2, "0");
+
+	const compareDate = (other: any, unit?: string): number => {
+		const otherDate = normalizeInput(other);
+		const left = new Date(date.getTime());
+		const right = new Date(otherDate.getTime());
+		if (unit === "day") {
+			left.setHours(0, 0, 0, 0);
+			right.setHours(0, 0, 0, 0);
+		}
+		return left.getTime() - right.getTime();
+	};
 
 	const mockMoment = {
 		format: function (format?: string) {
+			if (Number.isNaN(date.getTime())) {
+				return "Invalid date";
+			}
 			if (format === "YYYY-MM-DD") {
-				return date.toISOString().split("T")[0];
+				return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
+					date.getDate()
+				)}`;
+			} else if (format === "YYYY-MM-DD HH:mm:ss") {
+				return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
+					date.getDate()
+				)} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(
+					date.getSeconds()
+				)}`;
 			} else if (format === "D") {
 				return date.getDate().toString();
 			}
-			return date.toISOString().split("T")[0];
+			return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
+				date.getDate()
+			)}`;
 		},
-		diff: function () {
-			return 0;
+		diff: function (other: any, unit?: string) {
+			return compareDate(other, unit);
 		},
 		startOf: function (unit: string) {
+			if (unit === "day") {
+				date = new Date(date.getTime());
+				date.setHours(0, 0, 0, 0);
+			}
 			return mockMoment;
 		},
 		endOf: function (unit: string) {
+			if (unit === "day") {
+				date = new Date(date.getTime());
+				date.setHours(23, 59, 59, 999);
+			}
 			return mockMoment;
 		},
+		isValid: function () {
+			return !Number.isNaN(date.getTime());
+		},
 		isSame: function (other: any, unit?: string) {
-			if (other && other._date instanceof Date) {
-				const thisDate = date.toISOString().split("T")[0];
-				const otherDate = other._date.toISOString().split("T")[0];
-				return thisDate === otherDate;
-			}
-			return true;
+			return compareDate(other, unit) === 0;
 		},
 		isSameOrBefore: function (other: any, unit?: string) {
-			return true;
+			return compareDate(other, unit) <= 0;
 		},
 		isSameOrAfter: function (other: any, unit?: string) {
-			return true;
+			return compareDate(other, unit) >= 0;
 		},
 		isBefore: function (other: any, unit?: string) {
-			return false;
+			return compareDate(other, unit) < 0;
 		},
 		isAfter: function (other: any, unit?: string) {
-			return false;
+			return compareDate(other, unit) > 0;
 		},
 		isBetween: function (
 			start: any,
@@ -282,28 +334,39 @@ function momentFn(input?: any) {
 			unit?: string,
 			inclusivity?: string
 		) {
-			return true;
+			const startDiff = compareDate(start, unit);
+			const endDiff = compareDate(end, unit);
+			const includeStart = inclusivity?.[0] === "[";
+			const includeEnd = inclusivity?.[1] === "]";
+			return (includeStart ? startDiff >= 0 : startDiff > 0) &&
+				(includeEnd ? endDiff <= 0 : endDiff < 0);
 		},
 		clone: function () {
 			return momentFn(date);
 		},
 		add: function (amount: number, unit: string) {
+			date = new Date(date.getTime());
+			if (unit.startsWith("day")) date.setDate(date.getDate() + amount);
 			return mockMoment;
 		},
 		subtract: function (amount: number, unit: string) {
+			date = new Date(date.getTime());
+			if (unit.startsWith("day")) date.setDate(date.getDate() - amount);
 			return mockMoment;
 		},
 		valueOf: function () {
 			return date.getTime();
 		},
 		toDate: function () {
-			return date;
+			return new Date(date.getTime());
 		},
 		weekday: function (day?: number) {
 			if (day !== undefined) {
+				date = new Date(date.getTime());
+				date.setDate(date.getDate() - date.getDay() + day);
 				return mockMoment;
 			}
-			return 0;
+			return date.getDay();
 		},
 		day: function () {
 			return date.getDay();
@@ -311,10 +374,13 @@ function momentFn(input?: any) {
 		date: function () {
 			return date.getDate();
 		},
-		_date: date,
+		get _date() {
+			return date;
+		},
 	};
 	return mockMoment;
 }
+
 
 // Add static methods to momentFn
 (momentFn as any).utc = function () {
@@ -474,6 +540,15 @@ export class Modal extends Component {
 }
 
 // Mock other common Obsidian utilities
+export function normalizePath(path: string): string {
+	return (path ?? "")
+		.replace(/\\/g, "/")
+		.replace(/\/+/g, "/")
+		.replace(/^\.\//, "")
+		.replace(/^\/+/, "")
+		.replace(/\/+$/, "");
+}
+
 export function setIcon(el: HTMLElement, iconId: string): void {
 	// Mock implementation
 }

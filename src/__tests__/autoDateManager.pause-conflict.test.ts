@@ -26,7 +26,7 @@ const mockPlugin: Partial<TaskProgressBarPlugin> = {
 		taskStatuses: {
 			completed: "x|X",
 			inProgress: "/|-|>",
-			abandoned: "_|-",  // Note: '-' is used for both paused and abandoned
+			abandoned: "_|-",  // Deliberate duplicate: '-' is configured for both inProgress and abandoned
 			planned: "!",
 			notStarted: " ",
 		},
@@ -34,23 +34,19 @@ const mockPlugin: Partial<TaskProgressBarPlugin> = {
 } as unknown as TaskProgressBarPlugin;
 
 describe("autoDateManager - Pause Timer Conflict", () => {
-	it("should identify conflict when pausing timer changes status to abandoned", () => {
-		// When timer is paused, status changes from '/' to '-'
+	it("should resolve duplicate '-' marker by status precedence", () => {
+		// getStatusType checks completed, inProgress, abandoned, planned, notStarted.
+		// With '-' configured in both inProgress and abandoned, inProgress wins.
 		const oldStatus = "/";
 		const newStatus = "-";
 		const lineText = "- [-] Task with timer 🛫 2025-04-20 ^timer-123";
 		
-		// Check what autoDateManager will do
 		const oldType = getStatusType(oldStatus, mockPlugin as TaskProgressBarPlugin);
 		const newType = getStatusType(newStatus, mockPlugin as TaskProgressBarPlugin);
 		
-		console.log(`Status change: "${oldStatus}" (${oldType}) -> "${newStatus}" (${newType})`);
-		
-		// Both '/' and '-' are configured, so types should be identified
 		expect(oldType).toBe("inProgress");
-		expect(newType).toBe("abandoned");
+		expect(newType).toBe("inProgress");
 		
-		// Determine what date operations would be triggered
 		const operations = determineDateOperations(
 			oldStatus,
 			newStatus,
@@ -58,43 +54,25 @@ describe("autoDateManager - Pause Timer Conflict", () => {
 			lineText
 		);
 		
-		console.log("Date operations:", operations);
-		
-		// PROBLEM: When pausing, autoDateManager will try to add a cancelled date
-		expect(operations).toHaveLength(1);
-		expect(operations[0]).toMatchObject({
-			type: "add",
-			dateType: "cancelled",
-		});
-		
-		// This is the conflict: pause operation triggers date insertion
+		// Same resolved status type means a duplicate '-' pause scenario does not add cancelled dates.
+		expect(operations).toEqual([]);
 	});
 
-	it("should show that '-' marker is ambiguous (used for both pause and abandoned)", () => {
-		// The '-' marker is used for both:
-		// 1. Paused tasks (temporary state while timer is paused)
-		// 2. Abandoned/cancelled tasks (permanent state)
-		
+	it("should document that '-' marker is ambiguous but resolved as inProgress", () => {
 		const pausedTaskStatus = "-";
 		const abandonedTaskStatus = "-";
 		
 		const pausedType = getStatusType(pausedTaskStatus, mockPlugin as TaskProgressBarPlugin);
 		const abandonedType = getStatusType(abandonedTaskStatus, mockPlugin as TaskProgressBarPlugin);
 		
-		// Both resolve to the same type
-		expect(pausedType).toBe("abandoned");
-		expect(abandonedType).toBe("abandoned");
-		
-		// This ambiguity causes autoDateManager to treat paused tasks as abandoned
-		// and insert a cancelled date, which may not be desired for temporary pauses
+		// Both calls resolve by precedence to inProgress, not abandoned.
+		expect(pausedType).toBe("inProgress");
+		expect(abandonedType).toBe("inProgress");
 	});
 
-	it("should demonstrate the specific user scenario", () => {
-		// User's exact scenario
-		const taskBeforePause = "- [/] 交流交底 🚀 2025-07-30 [stage::disclosure_communication] 🛫 2025-04-20 ^timer-161940-4775";
+	it("should not add a cancelled date for the duplicate '-' pause scenario", () => {
 		const taskAfterPause = "- [-] 交流交底 🚀 2025-07-30 [stage::disclosure_communication] 🛫 2025-04-20 ^timer-161940-4775";
 		
-		// Status change from '/' to '-'
 		const operations = determineDateOperations(
 			"/",
 			"-",
@@ -102,20 +80,25 @@ describe("autoDateManager - Pause Timer Conflict", () => {
 			taskAfterPause
 		);
 		
-		// AutoDateManager will add a cancelled date
+		expect(operations).toEqual([]);
+	});
+
+	it("should still add a cancelled date for an unambiguous abandoned marker", () => {
+		const taskAfterAbandon = "- [_] 交流交底 🚀 2025-07-30 [stage::disclosure_communication] 🛫 2025-04-20 ^timer-161940-4775";
+		
+		const operations = determineDateOperations(
+			"/",
+			"_",
+			mockPlugin as TaskProgressBarPlugin,
+			taskAfterAbandon
+		);
+		
+		expect(getStatusType("_", mockPlugin as TaskProgressBarPlugin)).toBe("abandoned");
 		expect(operations).toContainEqual({
 			type: "add",
 			dateType: "cancelled",
 			format: "YYYY-MM-DD",
 		});
-		
-		// Expected result after autoDateManager processes it:
-		// The cancelled date (❌ 2025-07-31) would be inserted
-		const expectedResult = "- [-] 交流交底 🚀 2025-07-30 [stage::disclosure_communication] 🛫 2025-04-20 ❌ 2025-07-31 ^timer-161940-4775";
-		
-		console.log("Task before pause:", taskBeforePause);
-		console.log("Task after pause:", taskAfterPause);
-		console.log("Expected with date:", expectedResult);
 	});
 
 	it("should suggest solutions for the conflict", () => {

@@ -2,7 +2,7 @@ import { t } from "../translations/helper";
 import type TaskProgressBarPlugin from "../index"; // Type-only import
 import { BaseHabitData } from "../types/habit-card";
 import type { RootFilterState } from "../components/features/task/filter/ViewTaskFilter";
-import { IcsManagerConfig } from "../types/ics";
+import type { IcsManagerConfig } from "../types/ics";
 import type { EnhancedTimeParsingConfig } from "../types/time-parsing";
 import type { FileSourceConfiguration } from "../types/file-source";
 import { WorkspacesConfig } from "@/types/workspace";

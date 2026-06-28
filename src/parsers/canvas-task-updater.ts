@@ -9,6 +9,8 @@ import type TaskProgressBarPlugin from "../index";
 import { Events, emit } from "../dataflow/events/Events";
 import { CanvasParser } from "../dataflow/core/CanvasParser";
 import { formatDate as formatDateSmart } from "@/utils/date/date-utils";
+import { getPrimaryCompletedStatusMark } from "@/modules/view-tasks/completedStatusPredicate";
+import { isClosedStatusMark } from "@/modules/view-tasks/closedStatusPredicate";
 
 /**
  * Result of a Canvas task update operation
@@ -144,26 +146,26 @@ export class CanvasTaskUpdater {
 			let taskFound = false;
 			let updatedLines = [...lines];
 
-			// Find and update the task line
-			for (let i = 0; i < lines.length; i++) {
-				const line = lines[i];
-
-				// Check if this line contains the original task
-				if (
-					this.isTaskLine(line) &&
-					this.lineMatchesTask(line, originalTask)
-				) {
-					// Update the entire task line with comprehensive metadata handling
-					const updatedLine = this.updateCompleteTaskLine(
-						line,
-						originalTask,
-						updatedTask,
-					);
-					updatedLines[i] = updatedLine;
-					taskFound = true;
-					break;
-				}
+			// Find and update the task line. Prefer originalMarkdown matches, and
+			// only use stripped-content fallback when it identifies a single line.
+			const matchResult = this.findTaskLineMatch(lines, originalTask);
+			if (matchResult.index === -1) {
+				return {
+					success: false,
+					error:
+						matchResult.error ||
+						`Task not found in Canvas text node: ${originalTask.originalMarkdown}`,
+				};
 			}
+
+			const line = lines[matchResult.index];
+			const updatedLine = this.updateCompleteTaskLine(
+				line,
+				originalTask,
+				updatedTask,
+			);
+			updatedLines[matchResult.index] = updatedLine;
+			taskFound = true;
 
 			if (!taskFound) {
 				return {
@@ -192,21 +194,20 @@ export class CanvasTaskUpdater {
 	}
 
 	/**
-	 * Check if a line matches a specific task
+	 * Classify how a single line matches a task.
 	 */
-	private lineMatchesTask(line: string, task: Task): boolean {
-		// First try to match using originalMarkdown if available
+	private getTaskLineMatchKind(
+		line: string,
+		task: Task,
+	): "exact" | "status" | "fallback" | "none" {
 		if (task.originalMarkdown) {
-			// Remove indentation from both for comparison
 			const normalizedLine = line.trim();
 			const normalizedOriginal = task.originalMarkdown.trim();
 
-			// Direct match
 			if (normalizedLine === normalizedOriginal) {
-				return true;
+				return "exact";
 			}
 
-			// Try matching without the checkbox status (in case status changed)
 			const lineWithoutStatus = normalizedLine.replace(
 				/^[-*+]\s*\[[^\]]*\]\s*/,
 				"- [ ] ",
@@ -217,16 +218,66 @@ export class CanvasTaskUpdater {
 			);
 
 			if (lineWithoutStatus === originalWithoutStatus) {
-				return true;
+				return "status";
 			}
 		}
 
-		// Fallback to content matching (legacy behavior)
-		// Extract just the core task content, removing metadata
 		const lineContent = this.extractCoreTaskContent(line);
 		const taskContent = this.extractCoreTaskContent(task.content);
 
-		return lineContent === taskContent;
+		return lineContent === taskContent ? "fallback" : "none";
+	}
+
+	/**
+	 * Find the best line for a task. Exact originalMarkdown matches win over
+	 * status-only matches; metadata-stripped fallback is used only if unique.
+	 */
+	private findTaskLineMatch(
+		lines: string[],
+		task: Task,
+	): { index: number; error?: string } {
+		const matches: Record<"exact" | "status" | "fallback", number[]> = {
+			exact: [],
+			status: [],
+			fallback: [],
+		};
+
+		for (let i = 0; i < lines.length; i++) {
+			if (!this.isTaskLine(lines[i])) {
+				continue;
+			}
+
+			const matchKind = this.getTaskLineMatchKind(lines[i], task);
+			if (matchKind !== "none") {
+				matches[matchKind].push(i);
+			}
+		}
+
+		for (const matchKind of ["exact", "status"] as const) {
+			if (matches[matchKind].length > 0) {
+				return { index: matches[matchKind][0] };
+			}
+		}
+
+		if (matches.fallback.length === 1) {
+			return { index: matches.fallback[0] };
+		}
+
+		if (matches.fallback.length > 1) {
+			return {
+				index: -1,
+				error: `Ambiguous Canvas task fallback match for: ${task.originalMarkdown || task.content}`,
+			};
+		}
+
+		return { index: -1 };
+	}
+
+	/**
+	 * Check if a line matches a specific task
+	 */
+	private lineMatchesTask(line: string, task: Task): boolean {
+		return this.getTaskLineMatchKind(line, task) !== "none";
 	}
 
 	/**
@@ -303,7 +354,11 @@ export class CanvasTaskUpdater {
 		}
 		// Otherwise, update completion status if it changed
 		else if (originalTask.completed !== updatedTask.completed) {
-			const statusMark = updatedTask.completed ? "x" : " ";
+			const statusMark = updatedTask.completed
+				? getPrimaryCompletedStatusMark(
+					this.plugin.settings.taskStatuses,
+				)
+				: " ";
 			updatedLine = updatedLine.replace(
 				/(\s*[-*+]\s*\[)[^\]]*(\]\s*)/,
 				`$1${statusMark}$2`,
@@ -808,10 +863,16 @@ export class CanvasTaskUpdater {
 			let duplicateContent =
 				task.originalMarkdown || this.formatTaskLine(task);
 
-			// Reset completion status
+			// Reset closed completion status
 			duplicateContent = duplicateContent.replace(
-				/^(\s*[-*+]\s*\[)[xX\-](\])/,
-				"$1 $2",
+				/^(\s*[-*+]\s*\[)([^\]]*)(\])/,
+				(match, prefix, statusMark, suffix) =>
+					isClosedStatusMark(
+						statusMark,
+						this.plugin.settings.taskStatuses,
+					)
+						? prefix + " " + suffix
+						: match,
 			);
 
 			if (!preserveMetadata) {

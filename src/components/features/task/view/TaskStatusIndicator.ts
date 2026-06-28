@@ -1,6 +1,7 @@
 import { Component, Menu } from "obsidian";
 import TaskProgressBarPlugin from "@/index";
 import { Task } from "@/types/task";
+import { isCompletedStatusMark } from "@/modules/view-tasks/completedStatusPredicate";
 
 interface TaskStatusConfig {
 	cycle: string[];
@@ -464,47 +465,7 @@ export class TaskStatusIndicator extends Component {
 	}
 
 	private isCompletedMark(mark: string): boolean {
-		if (!mark) {
-			return false;
-		}
-
-		try {
-			const lower = mark.toLowerCase();
-			const completedCfg = String(
-				this.plugin.settings.taskStatuses?.completed || "x",
-			);
-			const completedMarks = completedCfg
-				.split("|")
-				.map((value) => value.trim().toLowerCase())
-				.filter(Boolean);
-
-			if (completedMarks.includes(lower)) {
-				return true;
-			}
-
-			const statusConfig = this.plugin.settings
-				.taskStatuses as Record<string, string>;
-			if (statusConfig) {
-				for (const [statusKey, variants] of Object.entries(
-					statusConfig,
-				)) {
-					const entries = variants
-						.split("|")
-						.map((value) => value.trim().toLowerCase())
-						.filter(Boolean);
-					if (entries.includes(lower)) {
-						return statusKey.toLowerCase() === "completed";
-					}
-				}
-			}
-		} catch (error) {
-			console.error(
-				"[TaskStatusIndicator] Failed to evaluate completed mark",
-				error,
-			);
-		}
-
-		return false;
+		return isCompletedStatusMark(mark, this.plugin.settings.taskStatuses);
 	}
 
 	private buildUpdatedTask(mark: string): Task {

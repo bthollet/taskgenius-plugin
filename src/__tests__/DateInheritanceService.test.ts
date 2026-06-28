@@ -403,7 +403,7 @@ describe("DateInheritanceService", () => {
 				mockMetadataCache.getFileCache.mockReturnValue({ frontmatter });
 
 				const result = await service.getFileDateInfo("test.md");
-				expect(result.metadataDate).toBeNull();
+				expect(result.metadataDate).toBeUndefined();
 				
 				// Clear cache for next test
 				service.clearCache();

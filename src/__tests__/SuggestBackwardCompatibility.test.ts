@@ -109,12 +109,12 @@ describe("Backward Compatibility Tests", () => {
 		expect(suggestions.some(s => s.id.includes("target") || s.replacement === "*")).toBe(true);
 	});
 
-	test("should provide fallback suggestions when new system returns empty", () => {
+	test("should provide top-level menu suggestions for slash trigger", () => {
 		suggest.setMinimalMode(true);
 		
-		// Test with an unknown trigger that would return empty from new system
+		// Slash is the dedicated top-level menu trigger.
 		const mockContext: EditorSuggestContext = {
-			query: "unknown",
+			query: "/",
 			start: { line: 0, ch: 0 },
 			end: { line: 0, ch: 1 },
 			editor: {} as Editor,
@@ -123,7 +123,6 @@ describe("Backward Compatibility Tests", () => {
 		
 		const suggestions = suggest.getSuggestions(mockContext);
 		
-		// Should return fallback suggestions
 		expect(suggestions.length).toBe(4); // date, priority, target, tag
 		expect(suggestions.map(s => s.id)).toEqual(["date", "priority", "target", "tag"]);
 	});
@@ -156,11 +155,11 @@ describe("Backward Compatibility Tests", () => {
 		suggest.selectSuggestion(newSuggestion, {} as MouseEvent);
 		
 		expect(mockEditor.replaceRange).toHaveBeenCalledWith("! ⏫", { line: 0, ch: 0 }, { line: 0, ch: 1 });
-		expect(mockEditor.setCursor).toHaveBeenCalledWith({ line: 0, ch: 4 });
-		expect(newSuggestion.action).toHaveBeenCalledWith(mockEditor, { line: 0, ch: 4 });
+		expect(mockEditor.setCursor).toHaveBeenCalledWith({ line: 0, ch: 3 });
+		expect(newSuggestion.action).toHaveBeenCalledWith(mockEditor, { line: 0, ch: 3 });
 	});
 
-	test("should handle legacy modal-based actions", () => {
+	test("should insert main-menu category trigger characters", () => {
 		const mockEditor = {
 			replaceRange: jest.fn(),
 			setCursor: jest.fn(),
@@ -172,33 +171,16 @@ describe("Backward Compatibility Tests", () => {
 		(suggest as any).context = {
 			editor: mockEditor,
 			end: mockCursor,
+			query: "/",
 		};
 		
-		// Mock the modal element and modal instance
-		const mockModal = {
-			showDatePickerAtCursor: jest.fn(),
-			showPriorityMenuAtCursor: jest.fn(),
-			showLocationMenuAtCursor: jest.fn(),
-			showTagSelectorAtCursor: jest.fn(),
-		};
-		
-		const mockModalEl = {
-			closest: jest.fn().mockReturnValue({
-				__minimalQuickCaptureModal: mockModal,
-			}),
-		};
-		
-		const mockEditorEl = {
-			cm: {
-				dom: mockModalEl,
+		(mockEditor as any).cm = {
+			dom: {
+				closest: jest.fn().mockReturnValue({}),
 			},
-			coordsAtPos: jest.fn().mockReturnValue({ left: 100, top: 200 }),
 		};
 		
-		(mockEditor as any).cm = { dom: mockModalEl };
-		(mockEditor as any).coordsAtPos = mockEditorEl.coordsAtPos;
-		
-		// Test legacy date suggestion
+		// Test main-menu date category suggestion
 		const dateSuggestion = {
 			id: "date",
 			label: "Date",
@@ -210,7 +192,7 @@ describe("Backward Compatibility Tests", () => {
 		suggest.selectSuggestion(dateSuggestion, {} as MouseEvent);
 		
 		expect(mockEditor.replaceRange).toHaveBeenCalledWith("~", { line: 0, ch: 0 }, { line: 0, ch: 1 });
-		expect(mockModal.showDatePickerAtCursor).toHaveBeenCalled();
+		expect(mockEditor.setCursor).toHaveBeenCalledWith({ line: 0, ch: 1 });
 	});
 
 	test("should maintain original trigger character behavior", () => {

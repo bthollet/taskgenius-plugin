@@ -181,6 +181,7 @@ describe("FileMetadataTaskParser", () => {
 					"complete"
 			);
 			expect(completeTask?.status).toBe("x"); // complete: true should be completed
+				expect(completeTask?.completed).toBe(true);
 
 			// Check todo task
 			const todoTask = result.tasks.find(
@@ -189,6 +190,7 @@ describe("FileMetadataTaskParser", () => {
 					"todo"
 			);
 			expect(todoTask?.status).toBe(" "); // todo: false should be incomplete
+				expect(todoTask?.completed).toBe(false);
 
 			// Check dueDate task
 			const dueDateTask = result.tasks.find(
@@ -197,6 +199,39 @@ describe("FileMetadataTaskParser", () => {
 					"dueDate"
 			);
 			expect(dueDateTask?.status).toBe(" "); // Due dates are typically incomplete
+		});
+
+		it("should synthesize custom primary completed status for boolean metadata", () => {
+			const customParser = new FileMetadataTaskParser(config, undefined, {
+				completed: "\u2713|done",
+			});
+			const result = customParser.parseFileForTasks("test.md", "# Test File", {
+				frontmatter: {
+					title: "Test Task",
+					complete: true,
+					todo: false,
+				},
+				tags: [],
+			});
+
+			expect(result.errors).toHaveLength(0);
+			expect(result.tasks).toHaveLength(2);
+
+			const completeTask = result.tasks.find(
+				(t) =>
+					(t.metadata as StandardFileTaskMetadata).sourceField ===
+					"complete"
+			);
+			expect(completeTask?.status).toBe("\u2713");
+			expect(completeTask?.completed).toBe(true);
+
+			const todoTask = result.tasks.find(
+				(t) =>
+					(t.metadata as StandardFileTaskMetadata).sourceField ===
+					"todo"
+			);
+			expect(todoTask?.status).toBe(" ");
+			expect(todoTask?.completed).toBe(false);
 		});
 
 		it("should not create tasks when parsing is disabled", () => {

@@ -14,6 +14,7 @@ import { TASK_REGEX } from "@/common/regex-define";
 import { ContextDetector } from "@/parsers/context-detector";
 import { TimeParsingService } from "@/services/time-parsing-service";
 import { TimeComponent } from "@/types/time-parsing";
+import { isCompletedStatusMark } from "@/modules/view-tasks/completedStatusPredicate";
 
 export class MarkdownTaskParser {
 	private config: TaskParserConfig;
@@ -132,7 +133,10 @@ export class MarkdownTaskParser {
 				const [parentId, indentLevel] =
 					this.findParentAndLevel(actualSpaces);
 				const [taskContent, rawStatus] = this.parseTaskContent(content);
-				const completed = rawStatus.toLowerCase() === "x";
+				const completed = isCompletedStatusMark(
+						rawStatus,
+						this.config.taskStatuses,
+					);
 				const status = this.getStatusFromMapping(rawStatus);
 				const [cleanedContent, metadata, tags] =
 					this.extractMetadataAndTagsInternal(taskContent);
@@ -169,9 +173,11 @@ export class MarkdownTaskParser {
 					}
 				}
 
-				// Prefer up-to-date detection for current file; fall back to provided tgProject
+				// Use the project resolved by ProjectConfigManager when available. It has
+				// access to current vault metadata/config and avoids stale worker-side
+				// re-detection from merged metadata shadowing config-file projects.
 				const taskTgProject =
-					this.determineTgProject(filePath) || tgProject;
+					tgProject || this.determineTgProject(filePath);
 
 				// Check for multiline comments
 				const [comment, linesToSkip] =
@@ -473,12 +479,6 @@ export class MarkdownTaskParser {
 							this.config.specialTagPrefixes[
 								prefix.toLowerCase()
 							];
-						console.debug("[TG] Tag parse", {
-							tag,
-							prefix,
-							mappedKey: metadataKey,
-							keys: Object.keys(this.config.specialTagPrefixes),
-						});
 						if (
 							metadataKey &&
 							this.config.metadataParseMode !==

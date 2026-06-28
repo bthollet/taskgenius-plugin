@@ -33,7 +33,6 @@ import {
 } from "./index";
 import { renderFileFilterSettingsTab } from "./tabs/FileFilterSettingsTab";
 import { renderTimeParsingSettingsTab } from "./tabs/TimeParsingSettingsTab";
-import { renderMcpIntegrationSettingsTab } from "./tabs/McpIntegrationSettingsTab";
 import { renderTaskTimerSettingTab } from "./tabs/TaskTimerSettingsTab";
 import { renderBasesSettingsTab } from "./tabs/BasesSettingsTab";
 import { renderWorkspaceSettingsTab } from "./tabs/WorkspaceSettingTab";
@@ -207,12 +206,6 @@ export class SettingsModal extends Modal {
 			category: "integration",
 		},
 		{
-			id: "mcp-integration",
-			name: t("MCP Integration"),
-			icon: "network",
-			category: "integration",
-		},
-		{
 			id: "bases-support",
 			name: t("Bases Support"),
 			icon: "layout",
@@ -357,10 +350,6 @@ export class SettingsModal extends Modal {
 		// Group tabs by category
 		const groupedTabs: { [key: string]: SettingsTab[] } = {};
 		this.tabs.forEach((tab) => {
-			// Skip MCP tab on non-desktop platforms
-			if (tab.id === "mcp-integration" && !Platform.isDesktopApp) {
-				return;
-			}
 			// Skip bases if API version doesn't support it
 			if (tab.id === "bases-support" && !requireApiVersion("1.9.10")) {
 				return;
@@ -627,16 +616,6 @@ export class SettingsModal extends Modal {
 			case "desktop-integration":
 				renderDesktopIntegrationSettingsTab(this as any, container);
 				break;
-			case "mcp-integration":
-				if (Platform.isDesktopApp) {
-					renderMcpIntegrationSettingsTab(
-						this as any,
-						container,
-						this.plugin,
-						() => this.applySettingsUpdate(),
-					);
-				}
-				break;
 			case "bases-support":
 				if (requireApiVersion("1.9.10")) {
 					renderBasesSettingsTab(this as any, container);
@@ -697,9 +676,6 @@ export class SettingsModal extends Modal {
 			"desktop-integration": t(
 				"Configure desktop notifications and tray.",
 			),
-			"mcp-integration": t(
-				"Configure Model Context Protocol integration.",
-			),
 			"bases-support": t("Configure Bases plugin integration."),
 			workspaces: t("Manage workspace configurations."),
 			reward: t("Configure the rewards and points system."),
@@ -732,7 +708,6 @@ export class SettingsModal extends Modal {
 			habit: `${base}/habit`,
 			"calendar-views": `${base}/task-view/calendar`,
 			"ics-integration": `${base}/ics-support`,
-			"mcp-integration": `${base}/mcp-integration`,
 			"bases-support": `${base}/bases-support`,
 			"desktop-integration": `${base}/bases-support`,
 			workspaces: `${base}/workspaces`,

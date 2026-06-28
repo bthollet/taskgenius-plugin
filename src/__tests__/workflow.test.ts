@@ -450,14 +450,14 @@ describe("Workflow Functionality", () => {
 		test("should return line end when no child tasks", () => {
 			const line = {
 				number: 1,
-				to: 50,
+				to: 17,
 				text: "- [ ] Parent task",
 			};
 			const doc = createMockText("- [ ] Parent task");
 
 			const result = determineTaskInsertionPoint(line, doc, "");
 
-			expect(result).toBe(50);
+			expect(result).toBe(17);
 		});
 
 		test("should return after last child task", () => {

@@ -151,7 +151,12 @@ export class ProjectDataCache {
 	): Promise<CachedProjectData | null> {
 		try {
 			const tgProject =
-				await this.projectConfigManager.determineTgProject(filePath);
+				await this.projectConfigManager.determineTgProject(filePath, {
+					// Inline-task dataflow path: never apply default project naming
+					// here (keep in sync with ProjectData.worker; avoids one task
+					// per filename-project).
+					applyDefaultNaming: false,
+				});
 
 			// Get enhanced metadata efficiently using cached config data
 			let enhancedMetadata: Record<string, any> = {};

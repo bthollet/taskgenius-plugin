@@ -1150,6 +1150,13 @@ describe("TaskParsingService Integration", () => {
 			const enhancedData =
 				await parsingService.computeEnhancedProjectData(filePaths);
 
+			// Files with a real project source (path mapping, frontmatter, config
+			// file) are still resolved. Note that `Other/random.md` has NO real
+			// project source: the dataflow/cache path intentionally does NOT apply
+			// `defaultProjectNaming` filename fallback there, otherwise every plain
+			// file with inline tasks would collapse into its own one-task project
+			// and the Inbox would empty out. So it is absent from the map and its
+			// tasks fall through to the Inbox.
 			expect(enhancedData.fileProjectMap).toEqual({
 				"Work/tasks.md": {
 					project: "Work Project",
@@ -1166,12 +1173,10 @@ describe("TaskParsingService Integration", () => {
 					source: "project.md",
 					readonly: true,
 				},
-				"Other/random.md": {
-					project: "random",
-					source: "filename",
-					readonly: true,
-				},
 			});
+			expect(
+				enhancedData.fileProjectMap["Other/random.md"]
+			).toBeUndefined();
 
 			expect(enhancedData.fileMetadataMap["Personal/notes.md"]).toEqual({
 				project: "Personal Project",

@@ -34,9 +34,25 @@ const HEADER_HEIGHT = 40;
 // const MILESTONE_SIZE = 10; // Moved to TaskRendererComponent
 const DAY_WIDTH_DEFAULT = 50; // Default width for a day column
 // const TASK_LABEL_PADDING = 5; // Moved to TaskRendererComponent
-const MIN_DAY_WIDTH = 10; // Minimum width for a day during zoom out
+const MIN_DAY_WIDTH = 2; // Minimum width for a day during zoom out (low enough that a full year, ~365d, fits on a typical viewport)
 const MAX_DAY_WIDTH = 200; // Maximum width for a day during zoom in
 const INDICATOR_HEIGHT = 4; // Height of individual offscreen task indicators
+
+// Shared month abbreviations for timeline tick labels.
+const MONTH_NAMES = [
+	"Jan",
+	"Feb",
+	"Mar",
+	"Apr",
+	"May",
+	"Jun",
+	"Jul",
+	"Aug",
+	"Sep",
+	"Oct",
+	"Nov",
+	"Dec",
+];
 
 // Define the structure for tasks prepared for rendering
 export interface GanttTaskItem {
@@ -153,6 +169,10 @@ export class GanttComponent extends Component {
 	// Offscreen task indicators
 	private leftIndicatorEl: HTMLElement; // Now a container
 	private rightIndicatorEl: HTMLElement; // Now a container
+	// The offscreen-indicator click handlers use event delegation on the two
+	// stable container elements, so they must be registered exactly once — not
+	// on every render (which would leak a listener per scroll/zoom).
+	private indicatorClickHandlersRegistered = false;
 
 	constructor(
 		private plugin: TaskProgressBarPlugin,
@@ -607,8 +627,6 @@ export class GanttComponent extends Component {
 			(pt): pt is PlacedGanttTaskItem => pt.startX !== undefined
 		);
 
-		console.log("Prepared Tasks:", this.preparedTasks);
-
 		// Calculate total dimensions
 		// Ensure a minimum height even if there are no tasks initially
 		const MIN_ROWS_DISPLAY = 5; // Show at least 5 rows worth of height
@@ -769,39 +787,46 @@ export class GanttComponent extends Component {
 			}
 		}
 
-		this.registerDomEvent(this.leftIndicatorEl, "click", (e) => {
-			const target = e.target as HTMLElement;
-			const taskId = target.getAttribute("data-task-id");
-			if (taskId) {
-				const task = this.tasks.find((t) => t.id === taskId);
-				if (task) {
-					this.scrollToDate(
-						new Date(
-							task.metadata.dueDate ||
-								task.metadata.startDate ||
-								task.metadata.scheduledDate!
-						)
-					);
-				}
-			}
-		});
+		// Register the delegated click handlers once. The indicator containers are
+		// created in the constructor and only have their children rebuilt each
+		// render, so registering here on every render would accumulate listeners.
+		if (!this.indicatorClickHandlersRegistered) {
+			this.indicatorClickHandlersRegistered = true;
 
-		this.registerDomEvent(this.rightIndicatorEl, "click", (e) => {
-			const target = e.target as HTMLElement;
-			const taskId = target.getAttribute("data-task-id");
-			if (taskId) {
-				const task = this.tasks.find((t) => t.id === taskId);
-				if (task) {
-					this.scrollToDate(
-						new Date(
-							task.metadata.startDate ||
+			this.registerDomEvent(this.leftIndicatorEl, "click", (e) => {
+				const target = e.target as HTMLElement;
+				const taskId = target.getAttribute("data-task-id");
+				if (taskId) {
+					const task = this.tasks.find((t) => t.id === taskId);
+					if (task) {
+						this.scrollToDate(
+							new Date(
 								task.metadata.dueDate ||
-								task.metadata.scheduledDate!
-						)
-					);
+									task.metadata.startDate ||
+									task.metadata.scheduledDate!
+							)
+						);
+					}
 				}
-			}
-		});
+			});
+
+			this.registerDomEvent(this.rightIndicatorEl, "click", (e) => {
+				const target = e.target as HTMLElement;
+				const taskId = target.getAttribute("data-task-id");
+				if (taskId) {
+					const task = this.tasks.find((t) => t.id === taskId);
+					if (task) {
+						this.scrollToDate(
+							new Date(
+								task.metadata.startDate ||
+									task.metadata.dueDate ||
+									task.metadata.scheduledDate!
+							)
+						);
+					}
+				}
+			});
+		}
 
 		// 2. Update Grid Background (Now using visibleTasks)
 		this.gridBackgroundComponent.updateParams({
@@ -901,20 +926,7 @@ export class GanttComponent extends Component {
 	}
 
 	private formatMajorTick(date: Date): string {
-		const monthNames = [
-			"Jan",
-			"Feb",
-			"Mar",
-			"Apr",
-			"May",
-			"Jun",
-			"Jul",
-			"Aug",
-			"Sep",
-			"Oct",
-			"Nov",
-			"Dec",
-		];
+		const monthNames = MONTH_NAMES;
 		switch (this.timescale) {
 			case "Year":
 				return date.getFullYear().toString();
@@ -935,8 +947,10 @@ export class GanttComponent extends Component {
 	private formatMinorTick(date: Date): string {
 		switch (this.timescale) {
 			case "Year":
-				// Show month abbreviation for minor ticks (start of month)
-				return this.formatMajorTick(date).substring(0, 3);
+				// Show month abbreviation for minor ticks (start of month).
+				// NOTE: must not reuse formatMajorTick here — in Year mode that
+				// returns the year string, so substring(0,3) produced "202".
+				return MONTH_NAMES[date.getMonth()];
 			case "Month":
 				// Show week number for minor ticks (start of week)
 				return `W${this.dateHelper.getWeekNumber(date)}`;

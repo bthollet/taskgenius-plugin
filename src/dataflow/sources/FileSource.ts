@@ -23,6 +23,7 @@ import { Events, emit, Seq, on } from "../events/Events";
 import { FileSourceConfig } from "./FileSourceConfig";
 
 import { FileFilterManager } from "@/managers/file-filter-manager";
+import { isCompletedStatusMark } from "@/modules/view-tasks/completedStatusPredicate";
 
 /**
  * FileSource - Independent event source for file-based tasks
@@ -669,7 +670,10 @@ export class FileSource {
 			content: safeContent,
 			filePath,
 			line: 0, // File tasks are at line 0
-			completed: status === "x" || status === "X",
+			completed: isCompletedStatusMark(
+					status,
+					this.plugin?.settings?.taskStatuses
+				),
 			status: status,
 			originalMarkdown: `**${safeContent}**`,
 			metadata: {

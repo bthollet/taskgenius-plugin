@@ -9,6 +9,7 @@
 		"version": "node version-bump.mjs && git add manifest.json manifest-beta.json versions.json",
 		"e-t": "cross-env node scripts/extract-translations.cjs",
 		"g-l": "cross-env node scripts/generate-locale-files.cjs",
+		"compile-i18n": "node scripts/compile-i18n.mjs",
 		"test": "jest",
 		"test:watch": "jest --watch",
 		"prepare": "husky",

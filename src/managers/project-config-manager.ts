@@ -242,9 +242,21 @@ export class ProjectConfigManager {
 	}
 
 	/**
-	 * Determine tgProject for a task based on various sources
+	 * Determine tgProject for a task based on various sources.
+	 *
+	 * @param options.applyDefaultNaming When true (default), the `defaultProjectNaming`
+	 *   fallback may assign a per-file project (e.g. the filename). This is only
+	 *   appropriate for File Source scenarios (where the file itself IS the task)
+	 *   and the direct/public API. The inline-task dataflow path (Resolver, cache,
+	 *   parsing service, worker sync fallback) MUST pass `false`, otherwise every
+	 *   file with inline tasks collapses into its own one-task project and the
+	 *   Inbox empties out. Keeping the default `true` preserves the documented
+	 *   behavior and the existing unit tests.
 	 */
-	async determineTgProject(filePath: string): Promise<TgProject | undefined> {
+	async determineTgProject(
+		filePath: string,
+		options?: { applyDefaultNaming?: boolean },
+	): Promise<TgProject | undefined> {
 		// Early return if enhanced project features are disabled
 		if (!this.enhancedProjectEnabled) {
 			return undefined;
@@ -527,9 +539,27 @@ export class ProjectConfigManager {
 			}
 		}
 
-		// NOTE: defaultProjectNaming fallback removed - it should only apply to File Source scenarios
-		// (files recognized as tasks/projects), not to all files with inline tasks.
-		// This prevents Inbox from being empty due to all tasks having auto-assigned projects.
+		// 4. Apply explicit default naming as the final fallback.
+		// The default strategy is disabled by default; when callers opt in, keep it
+		// lower priority than path, metadata, and config-file project sources.
+		//
+		// IMPORTANT: this fallback must only run for File Source scenarios (files
+		// recognized as tasks/projects) and the public API — NOT for files that
+		// merely contain inline tasks. The inline-task dataflow path passes
+		// `applyDefaultNaming: false` so it stays in sync with ProjectData.worker
+		// (which omits this fallback) and so the Projects view does not collapse
+		// into one task per filename-project.
+		if (options?.applyDefaultNaming ?? true) {
+			const defaultProjectName = this.generateDefaultProjectName(filePath);
+			if (defaultProjectName) {
+				return {
+					type: "default",
+					name: defaultProjectName,
+					source: this.defaultProjectNaming.strategy,
+					readonly: true,
+				};
+			}
+		}
 
 		return undefined;
 	}

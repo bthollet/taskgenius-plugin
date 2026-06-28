@@ -54,7 +54,7 @@ describe("Tags Inheritance Investigation", () => {
 		// But the appropriate fields should be inherited
 		expect(parentTask.metadata.priority).toBe(4); // "high" converted to 4
 		expect(parentTask.metadata.area).toBe("work");
-		expect(parentTask.metadata.tags).toContain("mobility");
+		expect(parentTask.metadata.tags).toContain("#mobility");
 		
 		// Parent task should have correct structural fields
 		expect(parentTask.metadata.children).toEqual([childTask.id]);

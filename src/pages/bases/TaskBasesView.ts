@@ -48,6 +48,7 @@ import { filterTasks } from "@/utils/task/task-filter-utils";
 import TaskProgressBarPlugin from "../../index";
 import { RootFilterState } from "@/components/features/task/filter/ViewTaskFilter";
 import { DEFAULT_FILE_TASK_MAPPING } from "@/managers/file-task-manager";
+import { isCompletedStatusMark } from "@/modules/view-tasks/completedStatusPredicate";
 import { TaskSelectionManager } from "@/components/features/task/selection/TaskSelectionManager";
 
 export const TaskBasesViewType = "task-genius";
@@ -763,15 +764,15 @@ export class TaskBasesView extends BasesView {
 	/**
 	 * Check if a status symbol represents a completed task
 	 */
-	private isCompletedStatus(statusSymbol: string): boolean {
-		// Check against plugin's completed status marks
-		const completedMarks = (
-			this.plugin.settings.taskStatuses?.completed || "x"
-		)
-			.split("|")
-			.map((m) => m.trim().toLowerCase());
+	private isCompletedMark(mark: string): boolean {
+		return isCompletedStatusMark(mark, this.plugin.settings.taskStatuses);
+	}
 
-		return completedMarks.includes(statusSymbol.toLowerCase());
+	/**
+	 * Check if a status symbol represents a completed task
+	 */
+	private isCompletedStatus(statusSymbol: string): boolean {
+		return this.isCompletedMark(statusSymbol);
 	}
 
 	/**
@@ -1584,7 +1585,8 @@ export class TaskBasesView extends BasesView {
 							text: status,
 						});
 						item.onClick(() => {
-							if (!task.completed && mark.toLowerCase() === "x") {
+							const completed = this.isCompletedMark(mark);
+							if (!task.completed && completed) {
 								task.metadata.completedDate = Date.now();
 							} else {
 								task.metadata.completedDate = undefined;
@@ -1592,7 +1594,7 @@ export class TaskBasesView extends BasesView {
 							this.updateTask(task, {
 								...task,
 								status: mark,
-								completed: mark.toLowerCase() === "x",
+								completed,
 							});
 						});
 					});
@@ -1639,7 +1641,7 @@ export class TaskBasesView extends BasesView {
 			}
 			const notStartedMark =
 				this.plugin.settings.taskStatuses.notStarted || " ";
-			if (updatedTask.status.toLowerCase() === "x") {
+			if (this.isCompletedMark(updatedTask.status)) {
 				updatedTask.status = notStartedMark;
 			}
 		}
@@ -1981,11 +1983,7 @@ export class TaskBasesView extends BasesView {
 		const taskToUpdate = this.tasks.find((t) => t.id === taskId);
 
 		if (taskToUpdate) {
-			const isCompleted =
-				newStatusMark.toLowerCase() ===
-				(this.plugin.settings.taskStatuses.completed || "x")
-					.split("|")[0]
-					.toLowerCase();
+			const isCompleted = this.isCompletedMark(newStatusMark);
 			const completedDate = isCompleted ? Date.now() : undefined;
 
 			if (

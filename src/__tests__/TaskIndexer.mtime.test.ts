@@ -16,7 +16,11 @@ jest.mock("obsidian", () => ({
 }));
 
 // Mock dependencies
-const mockApp = {} as any;
+const mockApp = {
+	workspace: {
+		onLayoutReady: jest.fn((callback: () => void) => callback()),
+	},
+} as any;
 const mockVault = {
 	on: jest.fn().mockReturnValue({}),
 	off: jest.fn(),
@@ -27,6 +31,9 @@ describe("TaskIndexer mtime functionality", () => {
 	let indexer: TaskIndexer;
 
 	beforeEach(() => {
+		jest.clearAllMocks();
+		mockVault.on.mockReturnValue({});
+		mockApp.workspace.onLayoutReady.mockImplementation((callback: () => void) => callback());
 		indexer = new TaskIndexer(mockApp, mockVault, mockMetadataCache);
 	});
 

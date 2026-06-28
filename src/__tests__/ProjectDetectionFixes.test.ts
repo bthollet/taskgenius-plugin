@@ -55,6 +55,10 @@ class MockVault {
 		return this.files.get(path) || null;
 	}
 
+	getFileByPath(path: string): MockTFile | null {
+		return this.files.get(path) || null;
+	}
+
 	async read(file: MockTFile): Promise<string> {
 		return this.fileContents.get(file.path) || "";
 	}

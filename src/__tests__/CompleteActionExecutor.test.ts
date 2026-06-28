@@ -3,7 +3,7 @@
  *
  * Tests for complete action executor functionality including:
  * - Completing related tasks by ID
- * - TaskManager integration
+ * - Dataflow/WriteAPI integration
  * - Configuration validation
  * - Error handling
  */
@@ -17,9 +17,12 @@ import {
 import { Task } from "../types/task";
 import { createMockPlugin, createMockApp } from "./mockUtils";
 
-// Mock TaskManager
-const mockTaskManager = {
+// Mock Dataflow QueryAPI and WriteAPI
+const mockQueryAPI = {
 	getTaskById: jest.fn(),
+};
+
+const mockWriteAPI = {
 	updateTask: jest.fn(),
 };
 
@@ -32,7 +35,10 @@ describe("CompleteActionExecutor", () => {
 	beforeEach(() => {
 		executor = new CompleteActionExecutor();
 		mockPlugin = createMockPlugin();
-		mockPlugin.taskManager = mockTaskManager;
+		mockPlugin.dataflowOrchestrator = {
+			getQueryAPI: jest.fn(() => mockQueryAPI),
+		};
+		mockPlugin.writeAPI = mockWriteAPI;
 
 		mockTask = {
 			id: "main-task-id",
@@ -135,10 +141,10 @@ describe("CompleteActionExecutor", () => {
 				originalMarkdown: "- [ ] Related task 2",
 			};
 
-			mockTaskManager.getTaskById
+			mockQueryAPI.getTaskById
 				.mockReturnValueOnce(relatedTask1)
 				.mockReturnValueOnce(relatedTask2);
-			mockTaskManager.updateTask.mockResolvedValue(undefined);
+			mockWriteAPI.updateTask.mockResolvedValue({ success: true });
 
 			const result = await executor.execute(mockContext, config);
 
@@ -148,23 +154,29 @@ describe("CompleteActionExecutor", () => {
 			);
 
 			// Verify tasks were updated with completed status
-			expect(mockTaskManager.updateTask).toHaveBeenCalledTimes(2);
-			expect(mockTaskManager.updateTask).toHaveBeenCalledWith({
-				...relatedTask1,
-				completed: true,
-				status: "x",
-				metadata: {
-					...relatedTask1.metadata,
-					completedDate: expect.any(Number),
+			expect(mockWriteAPI.updateTask).toHaveBeenCalledTimes(2);
+			expect(mockWriteAPI.updateTask).toHaveBeenCalledWith({
+				taskId: relatedTask1.id,
+				updates: {
+					...relatedTask1,
+					completed: true,
+					status: "x",
+					metadata: {
+						...relatedTask1.metadata,
+						completedDate: expect.any(Number),
+					},
 				},
 			});
-			expect(mockTaskManager.updateTask).toHaveBeenCalledWith({
-				...relatedTask2,
-				completed: true,
-				status: "x",
-				metadata: {
-					...relatedTask2.metadata,
-					completedDate: expect.any(Number),
+			expect(mockWriteAPI.updateTask).toHaveBeenCalledWith({
+				taskId: relatedTask2.id,
+				updates: {
+					...relatedTask2,
+					completed: true,
+					status: "x",
+					metadata: {
+						...relatedTask2.metadata,
+						completedDate: expect.any(Number),
+					},
 				},
 			});
 		});
@@ -198,10 +210,10 @@ describe("CompleteActionExecutor", () => {
 				originalMarkdown: "- [ ] Related task 2",
 			};
 
-			mockTaskManager.getTaskById
+			mockQueryAPI.getTaskById
 				.mockReturnValueOnce(relatedTask1)
 				.mockReturnValueOnce(relatedTask2);
-			mockTaskManager.updateTask.mockResolvedValue(undefined);
+			mockWriteAPI.updateTask.mockResolvedValue({ success: true });
 
 			const result = await executor.execute(mockContext, config);
 
@@ -209,20 +221,23 @@ describe("CompleteActionExecutor", () => {
 			expect(result.message).toBe("Completed tasks: related-task-2");
 
 			// Only the incomplete task should be updated
-			expect(mockTaskManager.updateTask).toHaveBeenCalledTimes(1);
-			expect(mockTaskManager.updateTask).toHaveBeenCalledWith({
-				...relatedTask2,
-				completed: true,
-				status: "x",
-				metadata: {
-					...relatedTask2.metadata,
-					completedDate: expect.any(Number),
+			expect(mockWriteAPI.updateTask).toHaveBeenCalledTimes(1);
+			expect(mockWriteAPI.updateTask).toHaveBeenCalledWith({
+				taskId: relatedTask2.id,
+				updates: {
+					...relatedTask2,
+					completed: true,
+					status: "x",
+					metadata: {
+						...relatedTask2.metadata,
+						completedDate: expect.any(Number),
+					},
 				},
 			});
 		});
 
 		it("should handle task not found", async () => {
-			mockTaskManager.getTaskById
+			mockQueryAPI.getTaskById
 				.mockReturnValueOnce(null) // Task not found
 				.mockReturnValueOnce({
 					id: "related-task-2",
@@ -233,7 +248,7 @@ describe("CompleteActionExecutor", () => {
 					lineNumber: 3,
 					filePath: "test.md",
 				});
-			mockTaskManager.updateTask.mockResolvedValue(undefined);
+			mockWriteAPI.updateTask.mockResolvedValue({ success: true });
 
 			const result = await executor.execute(mockContext, config);
 
@@ -243,7 +258,7 @@ describe("CompleteActionExecutor", () => {
 			);
 
 			// Only the found task should be updated
-			expect(mockTaskManager.updateTask).toHaveBeenCalledTimes(1);
+			expect(mockWriteAPI.updateTask).toHaveBeenCalledTimes(1);
 		});
 
 		it("should handle task update error", async () => {
@@ -275,12 +290,12 @@ describe("CompleteActionExecutor", () => {
 				originalMarkdown: "- [ ] Related task 2",
 			};
 
-			mockTaskManager.getTaskById
+			mockQueryAPI.getTaskById
 				.mockReturnValueOnce(relatedTask1)
 				.mockReturnValueOnce(relatedTask2);
-			mockTaskManager.updateTask
+			mockWriteAPI.updateTask
 				.mockRejectedValueOnce(new Error("Update failed"))
-				.mockResolvedValueOnce(undefined);
+				.mockResolvedValueOnce({ success: true });
 
 			const result = await executor.execute(mockContext, config);
 
@@ -290,26 +305,51 @@ describe("CompleteActionExecutor", () => {
 			);
 
 			// Both tasks should be attempted to update
-			expect(mockTaskManager.updateTask).toHaveBeenCalledTimes(2);
+			expect(mockWriteAPI.updateTask).toHaveBeenCalledTimes(2);
 		});
 
-		it("should handle no task manager available", async () => {
-			const contextWithoutTaskManager = {
+		it("should handle no dataflow orchestrator available", async () => {
+			const contextWithoutDataflow = {
 				...mockContext,
-				plugin: { ...mockPlugin, taskManager: null },
+				plugin: { ...mockPlugin, dataflowOrchestrator: null },
 			};
 
 			const result = await executor.execute(
-				contextWithoutTaskManager,
+				contextWithoutDataflow,
 				config
 			);
 
 			expect(result.success).toBe(false);
-			expect(result.error).toBe("Task manager not available");
+			expect(result.error).toBe("Dataflow orchestrator not available");
 		});
 
-		it("should handle all tasks failing", async () => {
-			mockTaskManager.getTaskById
+		it("should handle no write API available", async () => {
+			mockQueryAPI.getTaskById.mockReturnValueOnce({
+				id: "related-task-1",
+				content: "Related task 1",
+				completed: false,
+				status: " ",
+				metadata: {},
+				line: 2,
+				filePath: "test.md",
+				originalMarkdown: "- [ ] Related task 1",
+			});
+			const contextWithoutWriteAPI = {
+				...mockContext,
+				plugin: { ...mockPlugin, writeAPI: null },
+			};
+
+			const result = await executor.execute(
+				contextWithoutWriteAPI,
+				{ ...config, taskIds: ["related-task-1"] }
+			);
+
+			expect(result.success).toBe(false);
+			expect(result.error).toBe("Failed: related-task-1: WriteAPI not available");
+		});
+
+			it("should handle all tasks failing", async () => {
+			mockQueryAPI.getTaskById
 				.mockReturnValueOnce(null)
 				.mockReturnValueOnce(null);
 
@@ -344,8 +384,8 @@ describe("CompleteActionExecutor", () => {
 				taskIds: ["related-task-1"],
 			};
 
-			mockTaskManager.getTaskById.mockReturnValueOnce(relatedTask);
-			mockTaskManager.updateTask.mockResolvedValue(undefined);
+			mockQueryAPI.getTaskById.mockReturnValueOnce(relatedTask);
+			mockWriteAPI.updateTask.mockResolvedValue({ success: true });
 
 			const result = await executor.execute(
 				mockContext,
@@ -353,13 +393,16 @@ describe("CompleteActionExecutor", () => {
 			);
 
 			expect(result.success).toBe(true);
-			expect(mockTaskManager.updateTask).toHaveBeenCalledWith({
-				...relatedTask,
-				completed: true,
-				status: "x",
-				metadata: {
-					...relatedTask.metadata,
-					completedDate: expect.any(Number),
+			expect(mockWriteAPI.updateTask).toHaveBeenCalledWith({
+				taskId: relatedTask.id,
+				updates: {
+					...relatedTask,
+					completed: true,
+					status: "x",
+					metadata: {
+						...relatedTask.metadata,
+						completedDate: expect.any(Number),
+					},
 				},
 			});
 		});
@@ -375,7 +418,7 @@ describe("CompleteActionExecutor", () => {
 
 			expect(result.success).toBe(false);
 			expect(result.error).toBe("Invalid complete configuration");
-			expect(mockTaskManager.getTaskById).not.toHaveBeenCalled();
+			expect(mockQueryAPI.getTaskById).not.toHaveBeenCalled();
 		});
 	});
 
@@ -421,8 +464,8 @@ describe("CompleteActionExecutor", () => {
 				taskIds: ["task1"],
 			};
 
-			// Mock taskManager to throw an error
-			mockTaskManager.getTaskById.mockImplementation(() => {
+			// Mock query API to throw an error
+			mockQueryAPI.getTaskById.mockImplementation(() => {
 				throw new Error("Unexpected error");
 			});
 
@@ -454,8 +497,8 @@ describe("CompleteActionExecutor", () => {
 				originalMarkdown: "- [ ] Single related task",
 			};
 
-			mockTaskManager.getTaskById.mockReturnValueOnce(relatedTask);
-			mockTaskManager.updateTask.mockResolvedValue(undefined);
+			mockQueryAPI.getTaskById.mockReturnValueOnce(relatedTask);
+			mockWriteAPI.updateTask.mockResolvedValue({ success: true });
 
 			const result = await executor.execute(
 				mockContext,
@@ -478,7 +521,7 @@ describe("CompleteActionExecutor", () => {
 
 			// Mock all tasks as found and incomplete
 			manyTaskIds.forEach((taskId, index) => {
-				mockTaskManager.getTaskById.mockReturnValueOnce({
+				mockQueryAPI.getTaskById.mockReturnValueOnce({
 					id: taskId,
 					content: `Task ${index}`,
 					completed: false,
@@ -488,7 +531,7 @@ describe("CompleteActionExecutor", () => {
 					filePath: "test.md",
 				});
 			});
-			mockTaskManager.updateTask.mockResolvedValue(undefined);
+			mockWriteAPI.updateTask.mockResolvedValue({ success: true });
 
 			const result = await executor.execute(mockContext, manyTasksConfig);
 
@@ -496,7 +539,7 @@ describe("CompleteActionExecutor", () => {
 			expect(result.message).toBe(
 				`Completed tasks: ${manyTaskIds.join(", ")}`
 			);
-			expect(mockTaskManager.updateTask).toHaveBeenCalledTimes(10);
+			expect(mockWriteAPI.updateTask).toHaveBeenCalledTimes(10);
 		});
 	});
 });

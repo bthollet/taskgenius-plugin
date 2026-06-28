@@ -18,8 +18,8 @@ import { createMockPlugin, createMockApp } from "./mockUtils";
 import TaskProgressBarPlugin from "../index";
 
 // Mock Date to return consistent date for tests
-const mockDate = new Date("2025-07-04T12:00:00.000Z");
 const originalDate = Date;
+const mockDate = new originalDate("2025-07-07T00:00:00.000Z");
 
 // Mock vault
 const mockVault = {
@@ -48,11 +48,17 @@ describe("ArchiveActionExecutor - Markdown Tasks", () => {
 		mockPlugin = createMockPlugin();
 		mockApp = createMockApp();
 
-		// Mock Date globally
-		global.Date = jest.fn(() => mockDate) as any;
-		global.Date.now = jest.fn(() => mockDate.getTime());
-		global.Date.parse = originalDate.parse;
-		global.Date.UTC = originalDate.UTC;
+		// Mock Date globally while preserving original Date behavior for explicit constructor arguments
+		const MockDate = jest.fn((...args: any[]) => {
+			return args.length > 0
+				? new (originalDate as any)(...args)
+				: mockDate;
+		}) as any;
+		MockDate.now = jest.fn(() => mockDate.getTime());
+		MockDate.parse = originalDate.parse;
+		MockDate.UTC = originalDate.UTC;
+		MockDate.prototype = originalDate.prototype;
+		global.Date = MockDate;
 
 		// Reset mocks
 		jest.clearAllMocks();
@@ -65,11 +71,6 @@ describe("ArchiveActionExecutor - Markdown Tasks", () => {
 		mockApp.vault.create.mockReset();
 		mockApp.vault.createFolder.mockReset();
 
-		// Mock the current date to ensure consistent test results
-		// Mock Date methods globally
-		const mockDate = new Date("2025-07-07T00:00:00.000Z");
-		jest.spyOn(global, "Date").mockImplementation(() => mockDate as any);
-		Date.now = jest.fn(() => mockDate.getTime());
 	});
 
 	afterEach(() => {

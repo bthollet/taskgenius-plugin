@@ -34,18 +34,10 @@ describe("Debug File Metadata Inheritance", () => {
 		// 检查 priority 字段在任务中是否正确继承
 		const task = tasks[0];
 		
-		// 使用 throw error 来调试更详细的信息
-		throw new Error(`Debug detailed info:
-		Config enabled: ${config.fileMetadataInheritance?.enabled}
-		File metadata keys: ${Object.keys(fileMetadata).join(', ')}
-		File metadata values: ${JSON.stringify(fileMetadata)}
-		Task metadata keys: ${Object.keys(task?.metadata || {}).join(', ')}
-		Task metadata: ${JSON.stringify(task?.metadata)}
-		Task priority: ${task?.metadata?.priority} (type: ${typeof task?.metadata?.priority})
-		Task testField: ${task?.metadata?.testField} (exists: ${'testField' in (task?.metadata || {})})
-		Priority inherited: ${task?.metadata?.priority === 4}
-		TestField inherited: ${task?.metadata?.testField === 'testValue'}`);
-
 		expect(tasks).toHaveLength(1);
+		expect(task).toBeDefined();
+		expect(task.metadata.priority).toBe(4);
+		expect(task.metadata.testField).toBeUndefined();
+		expect("testField" in task.metadata).toBe(false);
 	});
 });

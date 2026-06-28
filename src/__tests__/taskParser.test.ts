@@ -127,6 +127,126 @@ describe("ConfigurableTaskParser", () => {
 			expect(tasks[0].status).toBe("x");
 		});
 
+
+		test("should parse default uppercase completed task", () => {
+			const content = "- [X] Uppercase completed task";
+			const tasks = parser.parseLegacy(content, "test.md");
+
+			expect(tasks).toHaveLength(1);
+			expect(tasks[0].content).toBe("Uppercase completed task");
+			expect(tasks[0].completed).toBe(true);
+			expect(tasks[0].status).toBe("X");
+		});
+
+		test("should use configured completed status mark", () => {
+			const customPlugin = createMockPlugin({
+				taskStatuses: {
+					completed: "✓",
+					inProgress: "/",
+					abandoned: "-",
+					planned: "?",
+					notStarted: " ",
+				},
+			});
+			const customParser = new MarkdownTaskParser(
+				getConfig("tasks", customPlugin)
+			);
+
+			const tasks = customParser.parseLegacy(
+				"- [✓] Custom completed task",
+				"test.md"
+			);
+
+			expect(tasks).toHaveLength(1);
+			expect(tasks[0].content).toBe("Custom completed task");
+			expect(tasks[0].completed).toBe(true);
+			expect(tasks[0].status).toBe("✓");
+		});
+
+		test("should use configured completed status aliases", () => {
+			const customPlugin = createMockPlugin({
+				taskStatuses: {
+					completed: "x|X|d",
+					inProgress: "/",
+					abandoned: "-",
+					planned: "?",
+					notStarted: " ",
+				},
+			});
+			const customParser = new MarkdownTaskParser(
+				getConfig("tasks", customPlugin)
+			);
+
+			const tasks = customParser.parseLegacy(
+				"- [d] Alias completed task",
+				"test.md"
+			);
+
+			expect(tasks).toHaveLength(1);
+			expect(tasks[0].content).toBe("Alias completed task");
+			expect(tasks[0].completed).toBe(true);
+			expect(tasks[0].status).toBe("d");
+		});
+
+		test("should parse configured multi-character completed status alias", () => {
+			const customPlugin = createMockPlugin({
+				taskStatuses: {
+					completed: "x|X|done",
+					inProgress: "/",
+					abandoned: "-",
+					planned: "?",
+					notStarted: " ",
+				},
+			});
+			const customParser = new MarkdownTaskParser(
+				getConfig("tasks", customPlugin)
+			);
+
+			const tasks = customParser.parseLegacy(
+				"- [done] Finished task",
+				"test.md"
+			);
+
+			expect(tasks).toHaveLength(1);
+			expect(tasks[0].content).toBe("Finished task");
+			expect(tasks[0].completed).toBe(true);
+			expect(tasks[0].status).toBe("done");
+		});
+
+		test("should not parse abandoned status as completed", () => {
+			const customPlugin = createMockPlugin({
+				taskStatuses: {
+					completed: "x|X|done",
+					inProgress: "/",
+					abandoned: "-",
+					planned: "?",
+					notStarted: " ",
+				},
+			});
+			const customParser = new MarkdownTaskParser(
+				getConfig("tasks", customPlugin)
+			);
+
+			const tasks = customParser.parseLegacy(
+				"- [-] Abandoned task",
+				"test.md"
+			);
+
+			expect(tasks).toHaveLength(1);
+			expect(tasks[0].content).toBe("Abandoned task");
+			expect(tasks[0].completed).toBe(false);
+			expect(tasks[0].status).toBe("-");
+		});
+
+		test("should not parse unknown status as completed", () => {
+			const tasks = parser.parseLegacy("- [?] Unknown task", "test.md");
+
+			expect(tasks).toHaveLength(1);
+			expect(tasks[0].content).toBe("Unknown task");
+			expect(tasks[0].completed).toBe(false);
+			expect(tasks[0].status).toBe("?");
+		});
+
 		test("should parse task with different status", () => {
 			const content = "- [/] In progress task";
 			const tasks = parser.parseLegacy(content, "test.md");

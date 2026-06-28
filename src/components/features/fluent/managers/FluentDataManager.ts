@@ -7,6 +7,10 @@ import { isDataflowEnabled } from "@/dataflow/createDataflow";
 import { Events, on } from "@/dataflow/events/Events";
 import { sortTasks } from "@/commands/sortTaskCommands";
 import { TaskTimerManager } from "@/managers/timer-manager";
+import {
+	shouldShowInFluentStatusFilter,
+	shouldShowInFluentWorkingOn,
+} from "@/modules/view-tasks/fluentTaskPredicates";
 
 /**
  * FluentDataManager - Stateless data loading, filtering, and sorting executor
@@ -216,21 +220,13 @@ export class FluentDataManager extends Component {
 
 		// Status filter
 		if (filters.status && filters.status !== "all") {
-			switch (filters.status) {
-				case "active":
-					result = result.filter((task) => !task.completed);
-					break;
-				case "completed":
-					result = result.filter((task) => task.completed);
-					break;
-				case "overdue":
-					result = result.filter((task) => {
-						if (task.completed || !task.metadata?.dueDate)
-							return false;
-						return new Date(task.metadata.dueDate) < new Date();
-					});
-					break;
-			}
+			result = result.filter((task) =>
+				shouldShowInFluentStatusFilter(
+					task,
+					filters.status,
+					this.plugin.settings.taskStatuses,
+				),
+			);
 		}
 
 		// Priority filter
@@ -340,23 +336,14 @@ export class FluentDataManager extends Component {
 			}
 		}
 
-		const result = tasks.filter((task) => {
-			// Skip completed tasks
-			if (task.completed) return false;
-
-			// Condition 1: Task has In Progress status
-			const taskStatus = task.status || " ";
-			const isInProgress = inProgressMarks.includes(taskStatus);
-			if (isInProgress) return true;
-
-			// Condition 2: Task has an active timer
-			const blockId = task.metadata?.id;
-			if (blockId && activeTimerBlockIds.has(blockId)) {
-				return true;
-			}
-
-			return false;
-		});
+		const result = tasks.filter((task) =>
+			shouldShowInFluentWorkingOn(
+				task,
+				this.plugin.settings.taskStatuses,
+				inProgressMarks,
+				activeTimerBlockIds,
+			),
+		);
 		
 		console.log(`[FluentData] applyWorkingOnFilter result: ${result.length} tasks after filter`);
 		return result;

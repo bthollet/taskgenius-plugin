@@ -30,6 +30,7 @@ jest.mock('obsidian', () => {
 		ButtonComponent: class MockButtonComponent {},
 		Platform: {},
 		TFile: class MockTFile {},
+		EditorSuggest: class MockEditorSuggest {},
 		AbstractInputSuggest: class MockAbstractInputSuggest {},
 		App: class MockApp {},
 		Modal: class MockModal {},
@@ -55,7 +56,7 @@ jest.mock('../components/features/task/view/details', () => ({
 	createTaskCheckbox: jest.fn(),
 }));
 
-jest.mock('../components/MarkdownRenderer', () => ({
+jest.mock('@/components/ui/renderers/MarkdownRenderer', () => ({
 	MarkdownRendererComponent: class MockMarkdownRendererComponent {},
 }));
 
@@ -67,6 +68,11 @@ const mockPlugin = {
 	taskManager: {
 		getAllTasks: jest.fn(() => []),
 		updateTask: jest.fn(),
+	},
+	dataflowOrchestrator: {
+		getQueryAPI: jest.fn(() => ({
+			getAllTasks: mockPlugin.taskManager.getAllTasks,
+		})),
 	},
 	settings: {
 		timelineSidebar: {
@@ -301,7 +307,7 @@ describe('TimelineSidebarView Date Deduplication', () => {
 	});
 
 	describe('loadEvents - Abandoned Tasks Filtering', () => {
-		it('should filter out abandoned tasks when showCompletedTasks is false', () => {
+		it('should filter out abandoned tasks when showCompletedTasks is false', async () => {
 			// Create mock tasks with different statuses
 			const mockTasks = [
 				createMockTask('task-1', 'Active task', { dueDate: new Date('2025-01-15').getTime() }),
@@ -316,7 +322,7 @@ describe('TimelineSidebarView Date Deduplication', () => {
 
 			// Create a new view instance and call loadEvents
 			const view = new TimelineSidebarView(mockLeaf as any, mockPlugin as any);
-			(view as any).loadEvents();
+			await (view as any).loadEvents();
 
 			// Check that only active and in-progress tasks are included
 			const events = (view as any).events;
@@ -328,7 +334,7 @@ describe('TimelineSidebarView Date Deduplication', () => {
 			expect(events.map((e: any) => e.task?.content)).not.toContain('Abandoned task');
 		});
 
-		it('should show all tasks including abandoned when showCompletedTasks is true', () => {
+		it('should show all tasks including abandoned when showCompletedTasks is true', async () => {
 			// Create mock tasks with different statuses
 			const mockTasks = [
 				createMockTask('task-1', 'Active task', { dueDate: new Date('2025-01-15').getTime() }),
@@ -342,7 +348,7 @@ describe('TimelineSidebarView Date Deduplication', () => {
 
 			// Create a new view instance and call loadEvents
 			const view = new TimelineSidebarView(mockLeaf as any, mockPlugin as any);
-			(view as any).loadEvents();
+			await (view as any).loadEvents();
 
 			// Check that all tasks are included
 			const events = (view as any).events;
@@ -352,7 +358,7 @@ describe('TimelineSidebarView Date Deduplication', () => {
 			);
 		});
 
-		it('should handle multiple abandoned status markers', () => {
+		it('should handle multiple abandoned status markers', async () => {
 			// Set multiple abandoned status markers
 			mockPlugin.settings.taskStatuses.abandoned = '-|_|>';
 			
@@ -370,7 +376,7 @@ describe('TimelineSidebarView Date Deduplication', () => {
 
 			// Create a new view instance and call loadEvents
 			const view = new TimelineSidebarView(mockLeaf as any, mockPlugin as any);
-			(view as any).loadEvents();
+			await (view as any).loadEvents();
 
 			// Check that only the active task is included
 			const events = (view as any).events;

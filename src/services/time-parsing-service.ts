@@ -494,6 +494,27 @@ export class TimeParsingService {
 		);
 		const afterText = afterTextRaw.toLowerCase();
 
+		// Prefer the immediate verbal context for prose such as
+		// "starts at 9:00 AM and ends at 5:00 PM". A broad lookback can
+		// otherwise let the earlier "starts" keyword classify every later time.
+		const immediateBeforeText = text
+			.substring(Math.max(0, index - 40), index)
+			.toLowerCase();
+		if (
+			/(?:^|\b)(?:starts?|begins?|starting|from)\s+(?:at\s+)?$/.test(
+				immediateBeforeText,
+			)
+		) {
+			return "start";
+		}
+		if (
+			/(?:^|\b)(?:ends?|due|deadline|until|by)\s+(?:at\s+)?$/.test(
+				immediateBeforeText,
+			)
+		) {
+			return "due";
+		}
+
 		// Combine surrounding context
 		const context = beforeText + " " + afterText;
 
@@ -518,7 +539,7 @@ export class TimeParsingService {
 			}
 		}
 
-		// Check for due keywords
+		// Check for due keywords before broad scheduled keywords such as "for".
 		for (const keyword of this.config.dateKeywords.due) {
 			if (context.includes(keyword.toLowerCase())) {
 				return "due";
@@ -530,8 +551,8 @@ export class TimeParsingService {
 			return "scheduled";
 		}
 
-		// Default to due if no specific context found
-		return "due";
+		// Unmarked standalone times are usually event times, not deadlines.
+		return "scheduled";
 	}
 
 	/**
@@ -1002,6 +1023,92 @@ export class TimeParsingService {
 		// Combine surrounding context
 		const context = beforeText + " " + afterText;
 
+		const escapeRegex = (value: string): string =>
+			value.replace(/[-\/\^$*+?.()|[\]{}]/g, "\$&");
+
+		const isAsciiKeyword = (keyword: string): boolean =>
+			/^[a-z0-9\s@-]+$/i.test(keyword);
+
+		const findKeywordMatches = (
+			value: string,
+			keywords: string[],
+		): Array<{ position: number; length: number }> => {
+			const matches: Array<{ position: number; length: number }> = [];
+
+			for (const keyword of keywords) {
+				const normalizedKeyword = keyword.toLowerCase();
+				if (!normalizedKeyword) continue;
+
+				const pattern = isAsciiKeyword(normalizedKeyword)
+					? String.raw`(?:^|\b)${escapeRegex(normalizedKeyword)}(?:$|(?=\W))`
+					: escapeRegex(normalizedKeyword);
+				const regex = new RegExp(pattern, "g");
+				let match: RegExpExecArray | null;
+
+				while ((match = regex.exec(value)) !== null) {
+					const matchedText = match[0];
+					const leadingOffset = matchedText.search(/\S/);
+					matches.push({
+						position: match.index + Math.max(leadingOffset, 0),
+						length: normalizedKeyword.length,
+					});
+
+					if (match.index === regex.lastIndex) {
+						regex.lastIndex++;
+					}
+				}
+			}
+
+			return matches;
+		};
+
+		const keywordGroups: Array<{
+			type: "start" | "due" | "scheduled";
+			keywords: string[];
+		}> = [
+			{ type: "start", keywords: this.config.dateKeywords.start },
+			{ type: "due", keywords: this.config.dateKeywords.due },
+			{
+				type: "scheduled",
+				keywords: this.config.dateKeywords.scheduled,
+			},
+		];
+
+		const nearestBefore = keywordGroups
+			.flatMap(({ type, keywords }) =>
+				findKeywordMatches(beforeText, keywords).map((match) => ({
+					type,
+					position: match.position,
+					distance: beforeText.length - (match.position + match.length),
+				})),
+			)
+			.sort((a, b) => a.distance - b.distance)[0];
+
+		const nearestAfter = keywordGroups
+			.flatMap(({ type, keywords }) =>
+				findKeywordMatches(afterText, keywords).map((match) => ({
+					type,
+					position: match.position,
+					distance: match.position,
+				})),
+			)
+			.sort((a, b) => a.distance - b.distance)[0];
+
+		if (nearestBefore && nearestAfter) {
+			return nearestBefore.distance <= nearestAfter.distance
+				? nearestBefore.type
+				: nearestAfter.type;
+		}
+
+		if (nearestBefore) {
+			return nearestBefore.type;
+		}
+
+		if (nearestAfter) {
+			return nearestAfter.type;
+		}
+		// Fall back to broad context checks for legacy cases where punctuation or
+		// unsupported wording separates the keyword from the parsed expression.
 		// Check for explicit emoji indicators (highest priority)
 		// Use raw text (not lowercased) for emoji detection
 		// These emojis are commonly used in task management to denote date types
@@ -1045,6 +1152,8 @@ export class TimeParsingService {
 
 		// Common Chinese date patterns - ordered from most specific to most general
 		const chinesePatterns = [
+			// 明天, 后天, 昨天, 前天 (must come before weekday patterns because 后天/前天 end with 天)
+			/明天|后天|昨天|前天/g,
 			// 下周一, 下周二, ... 下周日 (支持星期和礼拜两种表达) - MUST come before general patterns
 			/(?:下|上|这)(?:周|礼拜|星期)(?:一|二|三|四|五|六|日|天)/g,
 			// 数字+天后, 数字+周后, 数字+月后
@@ -1057,8 +1166,6 @@ export class TimeParsingService {
 			/周(?:一|二|三|四|五|六|日|天)/g,
 			// 礼拜一, 礼拜二, ... 礼拜日
 			/礼拜(?:一|二|三|四|五|六|日|天)/g,
-			// 明天, 后天, 昨天, 前天
-			/明天|后天|昨天|前天/g,
 			// 下周, 上周, 这周 (general week patterns - MUST come after specific weekday patterns)
 			/下周|上周|这周/g,
 			// 下个月, 上个月, 这个月
@@ -1123,6 +1230,19 @@ export class TimeParsingService {
 			now.getDate(),
 		);
 
+		// Exact relative-day words must be handled before the weekday parser;
+		// otherwise the trailing "天" in "后天"/"前天" is mistaken for Sunday.
+		switch (expression) {
+			case "明天":
+				return new Date(today.getTime() + 24 * 60 * 60 * 1000);
+			case "后天":
+				return new Date(today.getTime() + 2 * 24 * 60 * 60 * 1000);
+			case "昨天":
+				return new Date(today.getTime() - 24 * 60 * 60 * 1000);
+			case "前天":
+				return new Date(today.getTime() - 2 * 24 * 60 * 60 * 1000);
+		}
+
 		// Helper function to get weekday number (0 = Sunday, 1 = Monday, ..., 6 = Saturday)
 		const getWeekdayNumber = (dayStr: string): number => {
 			const dayMap: { [key: string]: number } = {
@@ -1185,14 +1305,6 @@ export class TimeParsingService {
 		}
 
 		switch (expression) {
-			case "明天":
-				return new Date(today.getTime() + 24 * 60 * 60 * 1000);
-			case "后天":
-				return new Date(today.getTime() + 2 * 24 * 60 * 60 * 1000);
-			case "昨天":
-				return new Date(today.getTime() - 24 * 60 * 60 * 1000);
-			case "前天":
-				return new Date(today.getTime() - 2 * 24 * 60 * 60 * 1000);
 			case "下周":
 				return new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
 			case "上周":

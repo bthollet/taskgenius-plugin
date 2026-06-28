@@ -36,9 +36,7 @@ describe("DuplicateActionExecutor - Canvas Tasks", () => {
 		mockApp = createMockApp();
 
 		// Setup the Canvas task updater mock
-		mockPlugin.taskManager.getCanvasTaskUpdater.mockReturnValue(
-			mockCanvasTaskUpdater
-		);
+		mockPlugin.writeAPI.canvasTaskUpdater = mockCanvasTaskUpdater;
 
 		// Reset mocks
 		jest.clearAllMocks();

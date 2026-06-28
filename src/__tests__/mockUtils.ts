@@ -459,6 +459,14 @@ const createMockPlugin = (
 		rebuild: jest.fn(async () => {}),
 	};
 
+	const mockCanvasTaskUpdater = {
+		updateCanvasTask: jest.fn(async () => ({ success: true })),
+		deleteCanvasTask: jest.fn(async () => ({ success: true })),
+		moveCanvasTask: jest.fn(async () => ({ success: true })),
+		duplicateCanvasTask: jest.fn(async () => ({ success: true })),
+		addTaskToCanvasNode: jest.fn(async () => ({ success: true })),
+	};
+
 	const mockWriteAPI = {
 		updateTask: jest.fn(async () => ({ success: true })),
 		updateTasksSequentially: jest.fn(async (args: any[]) => ({
@@ -469,6 +477,7 @@ const createMockPlugin = (
 		})),
 		createTask: jest.fn(async () => ({ success: true })),
 		deleteTask: jest.fn(async () => ({ success: true })),
+		canvasTaskUpdater: mockCanvasTaskUpdater,
 	};
 
 	// Return the plugin with all necessary properties

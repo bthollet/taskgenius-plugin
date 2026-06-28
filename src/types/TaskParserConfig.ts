@@ -23,6 +23,7 @@ export interface TaskParserConfig {
 	maxStackOperations: number;
 	maxStackSize: number;
 	statusMapping: Record<string, string>; // Status name to character mapping, e.g. "InProgress" -> "/"
+	taskStatuses?: Record<string, string | undefined>; // Configured status symbols/aliases, e.g. completed -> "x|X|done"
 	emojiMapping: Record<string, string>; // Emoji to metadata key mapping, e.g. "📅" -> "due"
 	metadataParseMode: MetadataParseMode; // Metadata parsing mode
 	specialTagPrefixes: Record<string, string>; // Special tag prefix mapping, e.g. "project" -> "project"

@@ -58,7 +58,16 @@ import { FilterConfigModal } from "@/components/features/task/filter/FilterConfi
 import { SavedFilterConfig } from "@/common/setting-definition";
 import { isDataflowEnabled } from "@/dataflow/createDataflow";
 import { Events, on } from "@/dataflow/events/Events";
+import {
+	findApplicableCycles,
+	getAllStatusNames,
+	getNextStatusPrimary,
+	getAllStatusMarks,
+} from "@/utils/status-cycle-resolver";
 import { TaskSelectionManager } from "@/components/features/task/selection/TaskSelectionManager";
+import { extractChangedTaskFields } from "@/modules/view-tasks/extractChangedTaskFields";
+import { applyTaskStatusTransition } from "@/modules/view-tasks/taskStatusTransition";
+import { isCompletedStatusMark } from "@/modules/view-tasks/completedStatusPredicate";
 
 export const TASK_VIEW_TYPE = "task-genius-view";
 
@@ -1263,61 +1272,144 @@ export class TaskView extends ItemView {
 			});
 		})
 			.addItem((item) => {
-				item.setIcon("square-pen");
-				item.setTitle(t("Switch status"));
-				const submenu = item.setSubmenu();
+			item.setIcon("square-pen");
+			item.setTitle(t("Switch status"));
+			const submenu = item.setSubmenu();
 
-				// Get unique statuses from taskStatusMarks
-				const statusMarks = this.plugin.settings.taskStatusMarks;
-				const uniqueStatuses = new Map<string, string>();
+			// Check if multi-cycle is enabled
+			if (
+				this.plugin.settings.statusCycles &&
+				this.plugin.settings.statusCycles.length > 0
+			) {
+				// Multi-cycle mode: show applicable cycles first
+				const currentMark = task.status || " ";
+				const applicableCycles = findApplicableCycles(
+					currentMark,
+					this.plugin.settings.statusCycles
+				);
 
-				// Build a map of unique mark -> status name to avoid duplicates
-				for (const status of Object.keys(statusMarks)) {
-					const mark =
-						statusMarks[status as keyof typeof statusMarks];
-					// If this mark is not already in the map, add it
-					// This ensures each mark appears only once in the menu
-					if (!Array.from(uniqueStatuses.values()).includes(mark)) {
-						uniqueStatuses.set(status, mark);
+				if (applicableCycles.length > 0) {
+					// Show cycle options
+					submenu.addItem((subItem) => {
+						subItem.setTitle(t("Cycle to next:"));
+						subItem.setDisabled(true);
+					});
+
+					for (const cycle of applicableCycles) {
+						const nextStatusResult = getNextStatusPrimary(
+							currentMark,
+							[cycle]
+						);
+						if (nextStatusResult) {
+							submenu.addItem((subItem) => {
+								const priorityIndicator =
+									cycle.priority === 0 ? "★ " : "";
+								subItem.titleEl.createEl(
+									"span",
+									{
+										cls: "status-option-checkbox",
+									},
+									(el) => {
+										createTaskCheckbox(
+											nextStatusResult.mark,
+											task,
+											el
+										);
+									}
+								);
+								subItem.titleEl.createEl("span", {
+									cls: "status-option",
+									text: `${priorityIndicator}${cycle.name}: → ${nextStatusResult.statusName}`,
+								});
+								subItem.onClick(async () => {
+									const updatedTask = applyTaskStatusTransition(task, {
+										status: nextStatusResult.mark,
+									isCompletedStatus: (status) => this.isCompletedMark(status),
+								});
+
+									await this.updateTask(task, updatedTask);
+								});
+							});
+						}
 					}
+
+					submenu.addSeparator();
+					submenu.addItem((subItem) => {
+						subItem.setTitle(t("Or choose any:"));
+						subItem.setDisabled(true);
+					});
 				}
 
-				// Create menu items from unique statuses
-				for (const [status, mark] of uniqueStatuses) {
-					submenu.addItem((item) => {
-						item.titleEl.createEl(
+				// Show all available statuses
+				const allStatusNames = getAllStatusNames(
+					this.plugin.settings.statusCycles
+				);
+				for (const statusName of Array.from(allStatusNames)) {
+					// Find the mark for this status
+					let mark = " ";
+					for (const cycle of this.plugin.settings.statusCycles) {
+						if (statusName in cycle.marks) {
+							mark = cycle.marks[statusName];
+							break;
+						}
+					}
+
+					submenu.addItem((subItem) => {
+						subItem.titleEl.createEl(
 							"span",
 							{
 								cls: "status-option-checkbox",
 							},
 							(el) => {
 								createTaskCheckbox(mark, task, el);
-							},
-						);
-						item.titleEl.createEl("span", {
-							cls: "status-option",
-							text: status,
-						});
-						item.onClick(async () => {
-							console.log("status", status, mark);
-							const willComplete = this.isCompletedMark(mark);
-							const updatedTask = {
-								...task,
-								status: mark,
-								completed: willComplete,
-							};
-
-							if (!task.completed && willComplete) {
-								updatedTask.metadata.completedDate = Date.now();
-							} else if (task.completed && !willComplete) {
-								updatedTask.metadata.completedDate = undefined;
 							}
+						);
+						subItem.titleEl.createEl("span", {
+							cls: "status-option",
+							text: statusName,
+						});
+						subItem.onClick(async () => {
+							const updatedTask = applyTaskStatusTransition(task, {
+									status: mark,
+									isCompletedStatus: (status) => this.isCompletedMark(status),
+								});
 
 							await this.updateTask(task, updatedTask);
 						});
 					});
 				}
-			})
+			} else {
+				// Legacy single-cycle mode
+				const uniqueStatuses = getAllStatusMarks(this.plugin.settings);
+
+				// Create menu items from unique statuses (note: getAllStatusMarks returns mark -> status)
+				for (const [mark, status] of uniqueStatuses) {
+					submenu.addItem((subItem) => {
+						subItem.titleEl.createEl(
+							"span",
+							{
+								cls: "status-option-checkbox",
+							},
+							(el) => {
+								createTaskCheckbox(mark, task, el);
+							}
+						);
+						subItem.titleEl.createEl("span", {
+							cls: "status-option",
+							text: status,
+						});
+						subItem.onClick(async () => {
+							const updatedTask = applyTaskStatusTransition(task, {
+									status: mark,
+									isCompletedStatus: (status) => this.isCompletedMark(status),
+								});
+
+							await this.updateTask(task, updatedTask);
+						});
+					});
+				}
+			}
+		})
 			.addSeparator()
 			.addItem((item) => {
 				item.setTitle(t("Edit"));
@@ -1519,34 +1611,7 @@ export class TaskView extends ItemView {
 	}
 
 	private isCompletedMark(mark: string): boolean {
-		if (!mark) return false;
-		try {
-			const lower = mark.toLowerCase();
-			const completedCfg = String(
-				this.plugin.settings.taskStatuses?.completed || "x",
-			);
-			const completedSet = completedCfg
-				.split("|")
-				.map((s) => s.trim().toLowerCase())
-				.filter(Boolean);
-			if (completedSet.includes(lower)) return true;
-			const all = this.plugin.settings.taskStatuses as Record<
-				string,
-				string
-			>;
-			if (all) {
-				for (const [type, symbols] of Object.entries(all)) {
-					const set = String(symbols)
-						.split("|")
-						.map((s) => s.trim().toLowerCase())
-						.filter(Boolean);
-					if (set.includes(lower)) {
-						return type.toLowerCase() === "completed";
-					}
-				}
-			}
-		} catch (_) {}
-		return false;
+		return isCompletedStatusMark(mark, this.plugin.settings.taskStatuses);
 	}
 
 	private async toggleTaskCompletion(task: Task) {
@@ -1580,62 +1645,7 @@ export class TaskView extends ItemView {
 		originalTask: Task,
 		updatedTask: Task,
 	): Partial<Task> {
-		const changes: Partial<Task> = {};
-
-		// Check top-level fields
-		if (originalTask.content !== updatedTask.content) {
-			changes.content = updatedTask.content;
-		}
-		if (originalTask.completed !== updatedTask.completed) {
-			changes.completed = updatedTask.completed;
-		}
-		if (originalTask.status !== updatedTask.status) {
-			changes.status = updatedTask.status;
-		}
-
-		// Check metadata fields
-		const metadataChanges: Partial<typeof originalTask.metadata> = {};
-		let hasMetadataChanges = false;
-
-		// Compare each metadata field
-		const metadataFields = [
-			"priority",
-			"project",
-			"tags",
-			"context",
-			"dueDate",
-			"startDate",
-			"scheduledDate",
-			"completedDate",
-			"recurrence",
-		];
-		for (const field of metadataFields) {
-			const originalValue = (originalTask.metadata as any)?.[field];
-			const updatedValue = (updatedTask.metadata as any)?.[field];
-
-			// Handle arrays specially (tags)
-			if (field === "tags") {
-				const origTags = originalValue || [];
-				const updTags = updatedValue || [];
-				if (
-					origTags.length !== updTags.length ||
-					!origTags.every((t: string, i: number) => t === updTags[i])
-				) {
-					metadataChanges.tags = updTags;
-					hasMetadataChanges = true;
-				}
-			} else if (originalValue !== updatedValue) {
-				(metadataChanges as any)[field] = updatedValue;
-				hasMetadataChanges = true;
-			}
-		}
-
-		// Only include metadata if there are changes
-		if (hasMetadataChanges) {
-			changes.metadata = metadataChanges as any;
-		}
-
-		return changes;
+		return extractChangedTaskFields(originalTask, updatedTask);
 	}
 
 	private async handleTaskUpdate(originalTask: Task, updatedTask: Task) {

@@ -161,8 +161,11 @@ export class TimelineHeaderComponent extends Component {
 					},
 				});
 				const label = formatMajorTick(currentDate);
-				if (label && width > 10) {
-					// Only add label if space allows
+				// Major labels span a whole month/year and are de-duped per
+				// year-month below, so they must NOT be gated on a single day's
+				// pixel width. The old `width > 10` gate dropped the year label at
+				// maximum zoom-out (where dayWidth === MIN_DAY_WIDTH).
+				if (label) {
 					const yearMonth = `${currentDate.getFullYear()}-${currentDate.getMonth()}`;
 					if (!uniqueMonths[yearMonth]) {
 						uniqueMonths[yearMonth] = { x: x + 5, label: label };
@@ -182,8 +185,13 @@ export class TimelineHeaderComponent extends Component {
 					},
 				});
 				const label = formatMinorTick(currentDate);
-				if (label && width > 2) {
-					// Only add label if space allows
+				// Year-mode minor labels are month names spaced roughly a month
+				// apart, so they must not be gated on a single day's width (which
+				// is below the threshold at max zoom-out). Day/Week/Month minor
+				// labels keep the per-day gate so narrow days stay uncluttered.
+				const minorHasRoom =
+					timescale === "Year" ? width >= 1 : width > 2;
+				if (label && minorHasRoom) {
 					if (timescale === "Day" || timescale === "Week") {
 						const yearWeek = `${currentDate.getFullYear()}-W${dateHelper.getWeekNumber(
 							currentDate
@@ -200,6 +208,12 @@ export class TimelineHeaderComponent extends Component {
 								x: x + width / 2,
 								label: dayLabel,
 							};
+						}
+					} else if (timescale === "Year") {
+						// Month abbreviation under the year, in the minor row.
+						const yearMonth = `${currentDate.getFullYear()}-${currentDate.getMonth()}`;
+						if (!uniqueWeeks[yearMonth]) {
+							uniqueWeeks[yearMonth] = { x: x + 5, label: label };
 						}
 					}
 				}

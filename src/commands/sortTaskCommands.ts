@@ -689,6 +689,13 @@ export function sortTasks<
 
 	preparedTasks.sort((a, b) => compareTasks(a, b, criteria, statusOrder));
 
+	// Recursively sort children if they exist
+	for (const task of preparedTasks) {
+		if (task.children && task.children.length > 0) {
+			task.children = sortTasks(task.children, criteria, settings);
+		}
+	}
+
 	return preparedTasks as T[]; // 类型断言回原类型
 }
 

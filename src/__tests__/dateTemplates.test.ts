@@ -92,6 +92,6 @@ describe("Date Templates", () => {
 		// Should leave malformed templates unchanged
 		expect(result1).toBe("{{DATE:}}.md"); // Empty format should return original match
 		expect(result2).toBe("{{DATE.md");
-		expect(result3).toBe("DATE:YYYY-MM-DD}}.md");
+		expect(result3).toBe("DATE-YYYY-MM-DD}}.md");
 	});
 });

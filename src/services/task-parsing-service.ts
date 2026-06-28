@@ -61,6 +61,7 @@ export interface TaskParsingServiceOptions {
 
 export class TaskParsingService {
 	private parser: MarkdownTaskParser;
+	private parserConfig: TaskParserConfig;
 	private projectConfigManager?: ProjectConfigManager;
 	private projectDataWorkerManager?: ProjectDataWorkerManager;
 	private vault: Vault;
@@ -69,7 +70,8 @@ export class TaskParsingService {
 	constructor(options: TaskParsingServiceOptions) {
 		this.vault = options.vault;
 		this.metadataCache = options.metadataCache;
-		this.parser = new MarkdownTaskParser(options.parserConfig);
+		this.parserConfig = options.parserConfig;
+		this.parser = new MarkdownTaskParser(this.parserConfig);
 
 		// Initialize project config manager if enhanced project is enabled
 		if (
@@ -124,6 +126,25 @@ export class TaskParsingService {
 					(await this.projectConfigManager.getProjectConfig(
 						filePath
 					)) || undefined;
+				if (projectConfigData) {
+					projectConfigData =
+						this.projectConfigManager.applyMappingsToMetadata(
+							projectConfigData
+						);
+					fileMetadata = { ...projectConfigData, ...(fileMetadata || {}) };
+					projectConfigData = undefined;
+					if (!this.parserConfig.fileMetadataInheritance?.enabled) {
+						this.parserConfig = {
+							...this.parserConfig,
+							fileMetadataInheritance: {
+								enabled: true,
+								inheritFromFrontmatter: true,
+								inheritFromFrontmatterForSubtasks: true,
+							},
+						};
+						this.parser = new MarkdownTaskParser(this.parserConfig);
+					}
+				}
 
 				// Determine tgProject
 				tgProject = await this.projectConfigManager.determineTgProject(
@@ -178,6 +199,25 @@ export class TaskParsingService {
 					(await this.projectConfigManager.getProjectConfig(
 						filePath
 					)) || undefined;
+				if (projectConfigData) {
+					projectConfigData =
+						this.projectConfigManager.applyMappingsToMetadata(
+							projectConfigData
+						);
+					fileMetadata = { ...projectConfigData, ...(fileMetadata || {}) };
+					projectConfigData = undefined;
+					if (!this.parserConfig.fileMetadataInheritance?.enabled) {
+						this.parserConfig = {
+							...this.parserConfig,
+							fileMetadataInheritance: {
+								enabled: true,
+								inheritFromFrontmatter: true,
+								inheritFromFrontmatterForSubtasks: true,
+							},
+						};
+						this.parser = new MarkdownTaskParser(this.parserConfig);
+					}
+				}
 
 				// Determine tgProject
 				tgProject = await this.projectConfigManager.determineTgProject(
@@ -297,7 +337,8 @@ export class TaskParsingService {
 	 * Update parser configuration
 	 */
 	updateParserConfig(config: TaskParserConfig): void {
-		this.parser = new MarkdownTaskParser(config);
+		this.parserConfig = config;
+		this.parser = new MarkdownTaskParser(this.parserConfig);
 	}
 
 	/**

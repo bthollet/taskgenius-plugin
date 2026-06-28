@@ -200,6 +200,9 @@ export function getAllStatusNames(
 		for (const statusName of cycle.cycle) {
 			statusNames.add(statusName);
 		}
+		for (const statusName of Object.keys(cycle.marks)) {
+			statusNames.add(statusName);
+		}
 	}
 
 	return statusNames;

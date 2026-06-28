@@ -65,10 +65,19 @@ function sanitizeFilePath(filePath: string): string {
  * @returns The processed file path with date templates replaced
  */
 export function processDateTemplates(filePath: string): string {
+	// Protect malformed empty date templates so sanitizeFilePath does not rewrite
+	// their colon while sanitizing valid formatted date output.
+	const emptyDateTemplates: string[] = [];
+	const protectedPath = filePath.replace(/\{\{DATE?:\s*\}\}/gi, (match) => {
+		const placeholder = `__EMPTY_DATE_TEMPLATE_${emptyDateTemplates.length}__`;
+		emptyDateTemplates.push(match);
+		return placeholder;
+	});
+
 	// Match patterns like {{DATE:YYYY-MM-DD}} or {{date:YYYY-MM-DD-HHmm}}
 	const dateTemplateRegex = /\{\{DATE?:([^}]+)\}\}/gi;
 
-	const processedPath = filePath.replace(
+	const processedPath = protectedPath.replace(
 		dateTemplateRegex,
 		(match, format) => {
 			try {
@@ -92,8 +101,16 @@ export function processDateTemplates(filePath: string): string {
 		}
 	);
 
-	// Sanitize the entire path while preserving directory structure
-	return sanitizeFilePath(processedPath);
+	// Sanitize the entire path while preserving directory structure, then restore
+	// protected malformed empty date templates unchanged.
+	let sanitizedPath = sanitizeFilePath(processedPath);
+	emptyDateTemplates.forEach((template, index) => {
+		sanitizedPath = sanitizedPath.replace(
+			`__EMPTY_DATE_TEMPLATE_${index}__`,
+			template
+		);
+	});
+	return sanitizedPath;
 }
 
 // Save the captured content to the target file

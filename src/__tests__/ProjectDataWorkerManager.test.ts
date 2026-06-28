@@ -18,6 +18,7 @@ describe("ProjectDataWorkerManager", () => {
 	beforeEach(() => {
 		vault = {
 			getAbstractFileByPath: jest.fn(),
+			getFileByPath: jest.fn(),
 			read: jest.fn(),
 		} as any;
 

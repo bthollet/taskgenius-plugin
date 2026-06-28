@@ -18,6 +18,7 @@ import { getConfig } from "../../common/task-parser-config";
 import { FileMetadataTaskParser } from "../../parsers/file-metadata-parser";
 import { CanvasParser } from "../core/CanvasParser";
 import { SupportedFileType } from "@/utils/file/file-type-detector";
+import { isCompletedStatusMark } from "../../modules/view-tasks/completedStatusPredicate";
 
 /**
  * Enhanced task parsing using configurable parser
@@ -180,7 +181,8 @@ function parseTasksWithConfigurableParser(
 			settings.preferMetadataFormat,
 			settings.ignoreHeading,
 			settings.focusHeading,
-		);
+			settings.taskStatuses,
+			);
 	}
 }
 
@@ -193,6 +195,7 @@ function parseTasksFromContentLegacy(
 	format: "tasks" | "dataview",
 	ignoreHeading: string,
 	focusHeading: string,
+	taskStatuses?: Record<string, string | undefined>,
 ): Task[] {
 	// Basic fallback parsing for critical errors
 	const lines = content.split("\n");
@@ -200,11 +203,11 @@ function parseTasksFromContentLegacy(
 
 	for (let i = 0; i < lines.length; i++) {
 		const line = lines[i];
-		const taskMatch = line.match(/^(\s*[-*+]|\d+\.)\s*\[(.)\]\s*(.*)$/);
+		const taskMatch = line.match(/^(\s*[-*+]|\d+\.)\s*\[([^\[\]]+)\]\s*(.*)$/);
 
 		if (taskMatch) {
 			const [, , status, taskContent] = taskMatch;
-			const completed = status.toLowerCase() === "x";
+			const completed = isCompletedStatusMark(status, taskStatuses);
 
 			tasks.push({
 				id: `${filePath}-L${i}`,
@@ -335,7 +338,8 @@ function processFile(
 				const fileMetadataParser = new FileMetadataTaskParser(
 					settings.fileParsingConfig,
 					settings.projectConfig?.metadataConfig?.detectionMethods,
-				);
+						settings.taskStatuses,
+			);
 
 				const fileMetadataResult = fileMetadataParser.parseFileForTasks(
 					filePath,

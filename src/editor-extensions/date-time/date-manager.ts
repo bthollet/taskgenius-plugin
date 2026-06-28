@@ -362,11 +362,13 @@ function determineDateOperations(
 
 	// Add new status date if it should be managed and doesn't already exist
 	if (settings.manageCompletedDate && newStatusType === "completed") {
-		operations.push({
-			type: "add",
-			dateType: "completed",
-			format: settings.completedDateFormat || "YYYY-MM-DD",
-		});
+		if (!hasExistingDate(lineText, "completed", plugin)) {
+			operations.push({
+				type: "add",
+				dateType: "completed",
+				format: settings.completedDateFormat || "YYYY-MM-DD",
+			});
+		}
 	}
 	if (settings.manageStartDate && newStatusType === "inProgress") {
 		// Only add start date if it doesn't already exist
@@ -379,11 +381,14 @@ function determineDateOperations(
 		}
 	}
 	if (settings.manageCancelledDate && newStatusType === "abandoned") {
-		operations.push({
-			type: "add",
-			dateType: "cancelled",
-			format: settings.cancelledDateFormat || "YYYY-MM-DD",
-		});
+		// Only add cancelled date if it doesn't already exist
+		if (!hasExistingDate(lineText, "cancelled", plugin)) {
+			operations.push({
+				type: "add",
+				dateType: "cancelled",
+				format: settings.cancelledDateFormat || "YYYY-MM-DD",
+			});
+		}
 	}
 
 	return operations;

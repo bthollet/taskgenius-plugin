@@ -116,7 +116,9 @@ describe("Improved Date Insertion Logic", () => {
 				"cancelled"
 			);
 			// For cancelled date, it should go after the start date
-			expect(position).toBeGreaterThan(24); // After "🚀 2025-09-01"
+			expect(position).toBe(
+					lineText.indexOf("2025-09-01") + "2025-09-01".length
+				);
 		});
 
 		it("should handle multiple metadata items correctly", () => {
@@ -171,7 +173,7 @@ describe("Improved Date Insertion Logic", () => {
 				mockPlugin as TaskProgressBarPlugin,
 				"cancelled"
 			);
-			expect(position).toBe(6); // After trimming trailing spaces
+			expect(position).toBe(9); // Preserve typed spaces in blank task content
 		});
 
 		it("should handle task with brackets in content", () => {

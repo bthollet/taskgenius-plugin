@@ -94,6 +94,13 @@ const copyManifestPlugin = {
 	},
 };
 
+// Translations are now downloaded at runtime from GitHub.
+// This plugin is kept as a no-op placeholder so the plugins array doesn't break.
+const copyTranslationsPlugin = {
+	name: "copy-translations",
+	setup() {},
+};
+
 const buildOptions = {
 	banner: {
 		js: banner,
@@ -117,6 +124,7 @@ const buildOptions = {
 		renamePluginWithDir,
 		cssSettingsPluginWithDir,
 		copyManifestPlugin,
+		copyTranslationsPlugin,
 	],
 	bundle: true,
 	alias: {

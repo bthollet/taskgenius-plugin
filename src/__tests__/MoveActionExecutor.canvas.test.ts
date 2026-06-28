@@ -23,16 +23,11 @@ const mockCanvasTaskUpdater = {
 	deleteCanvasTask: jest.fn(),
 };
 
-// Mock TaskManager
-const mockTaskManager = {
-	getCanvasTaskUpdater: jest.fn(() => mockCanvasTaskUpdater),
-};
-
 // Mock plugin
 const mockPlugin = {
 	...createMockPlugin(),
-	taskManager: mockTaskManager,
 } as any;
+mockPlugin.writeAPI.canvasTaskUpdater = mockCanvasTaskUpdater;
 
 // Mock vault
 const mockVault = {

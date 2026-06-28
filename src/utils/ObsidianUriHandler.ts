@@ -125,7 +125,6 @@ export class ObsidianUriHandler {
 			workflow: "workflow",
 			reward: "reward",
 			habit: "habit",
-			"mcp-integration": "mcp-integration",
 			ics: "ics",
 			"time-parsing": "time-parsing",
 			"beta-test": "beta-test",
@@ -184,26 +183,6 @@ export class ObsidianUriHandler {
 				header.scrollIntoView({ behavior: "smooth", block: "start" });
 			}
 		});
-
-		// Special handling for specific sections
-		if (sectionId === "cursor") {
-			// Look for Cursor configuration section
-			const cursorSection = modal.containerEl.querySelector(
-				".mcp-client-section",
-			);
-			if (cursorSection) {
-				const header =
-					cursorSection.querySelector(".mcp-client-header");
-				if (header && header.textContent?.includes("Cursor")) {
-					// Click to expand
-					(header as HTMLElement).click();
-					cursorSection.scrollIntoView({
-						behavior: "smooth",
-						block: "start",
-					});
-				}
-			}
-		}
 	}
 
 	/**
@@ -232,49 +211,7 @@ export class ObsidianUriHandler {
 		action: string,
 		tab?: string,
 	): Promise<void> {
-		// Wait for settings to be fully loaded
-		await new Promise((resolve) => setTimeout(resolve, 500));
-
-		const modal = (this.plugin.app as App).setting.activeTab;
-		if (!modal) return;
-
-		switch (action) {
-			case "enable":
-				if (tab === "mcp-integration") {
-					// Find and click the enable toggle
-					const toggle = modal.containerEl.querySelector(
-						".setting-item:has(.setting-item-name:contains('Enable MCP Server')) .checkbox-container input",
-					) as HTMLInputElement;
-					if (toggle && !toggle.checked) {
-						toggle.click();
-					}
-				}
-				break;
-
-			case "test":
-				if (tab === "mcp-integration") {
-					// Find and click the test button
-					const testButton = Array.from(
-						modal.containerEl.querySelectorAll("button"),
-					).find((btn) => btn.textContent === t("Test"));
-					if (testButton) {
-						(testButton as HTMLButtonElement).click();
-					}
-				}
-				break;
-
-			case "regenerate-token":
-				if (tab === "mcp-integration") {
-					// Find and click the regenerate button
-					const regenerateButton = Array.from(
-						modal.containerEl.querySelectorAll("button"),
-					).find((btn) => btn.textContent === t("Regenerate"));
-					if (regenerateButton) {
-						(regenerateButton as HTMLButtonElement).click();
-					}
-				}
-				break;
-		}
+		return;
 	}
 
 	/**

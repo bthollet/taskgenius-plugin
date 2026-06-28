@@ -189,7 +189,7 @@ describe("DateInheritanceService Integration", () => {
 				mockMetadataCache.getFileCache.mockReturnValue({ frontmatter });
 
 				const result = await service.getFileDateInfo("test.md");
-				expect(result.metadataDate).toBeNull();
+				expect(result.metadataDate).toBeUndefined();
 				
 				// Clear cache for next test
 				service.clearCache();
@@ -311,10 +311,10 @@ describe("DateInheritanceService Integration", () => {
 				const result = await service.getFileDateInfo(filePath);
 				
 				if (filePath.includes("Template")) {
-					expect(result.dailyNoteDate).toBeNull();
+					expect(result.dailyNoteDate).toBeUndefined();
 					expect(result.isDailyNote).toBe(false);
 				} else {
-					expect(result.dailyNoteDate).not.toBeNull();
+					expect(result.dailyNoteDate).not.toBeUndefined();
 					expect(result.isDailyNote).toBe(true);
 				}
 				
@@ -335,8 +335,8 @@ describe("DateInheritanceService Integration", () => {
 
 			const result = await service.getFileDateInfo("Regular Note.md");
 			
-			expect(result.dailyNoteDate).toBeNull();
-			expect(result.metadataDate).toBeNull();
+			expect(result.dailyNoteDate).toBeUndefined();
+			expect(result.metadataDate).toBeUndefined();
 			expect(result.isDailyNote).toBe(false);
 			expect(result.ctime).toEqual(new Date(2024, 2, 10));
 		});
@@ -346,7 +346,7 @@ describe("DateInheritanceService Integration", () => {
 
 			const result = await service.getFileDateInfo("nonexistent.md");
 			
-			expect(result.dailyNoteDate).toBeNull();
+			expect(result.dailyNoteDate).toBeUndefined();
 			expect(result.metadataDate).toBeUndefined();
 			expect(result.isDailyNote).toBe(false);
 			expect(result.ctime).toEqual(expect.any(Date));

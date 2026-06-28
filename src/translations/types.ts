@@ -1,4 +1,4 @@
-export type TranslationKey = keyof typeof import('./locale/en').default;
+export type TranslationKey = string;
 
 export interface Translation {
   [key: string]: string | Translation;

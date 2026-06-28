@@ -6,15 +6,14 @@ import {
 	anySiblingWithStatus,
 	getParentTaskStatus,
 	hasAnyChildTasksAtLevel,
-	taskStatusChangeAnnotation,
-} from "../editor-extensions/autocomplete/parent-task-updater"; // Adjust the import path as necessary
+} from "../editor-extensions/autocomplete/parent-task-updater";
+import { taskStatusChangeAnnotation } from "@/editor-extensions/task-operations/status-switcher"; // Adjust the import path as necessary
 import { buildIndentString } from "../utils";
 import {
 	createMockTransaction,
 	createMockApp,
 	createMockPlugin,
 	createMockText,
-	mockParentTaskStatusChangeAnnotation,
 } from "./mockUtils";
 
 // --- Mock Setup ---
@@ -447,7 +446,7 @@ describe("handleParentTaskUpdateTransaction (Integration)", () => {
 		expect(parentChange.to).toBe(4);
 		expect(parentChange.insert).toBe("/"); // Should be in progress marker
 		expect(result.annotations).toEqual([
-			mockParentTaskStatusChangeAnnotation.of(
+			taskStatusChangeAnnotation.of(
 				"autoCompleteParent.IN_PROGRESS"
 			),
 		]);
@@ -508,7 +507,7 @@ describe("handleParentTaskUpdateTransaction (Integration)", () => {
 		expect(parentChange.to).toBe(4);
 		expect(parentChange.insert).toBe("/");
 		expect(result.annotations).toEqual([
-			mockParentTaskStatusChangeAnnotation.of(
+			taskStatusChangeAnnotation.of(
 				"autoCompleteParent.IN_PROGRESS"
 			),
 		]);
@@ -582,7 +581,7 @@ describe("handleParentTaskUpdateTransaction (Integration)", () => {
 				{ fromA: 21, toA: 22, fromB: 21, toB: 22, insertedText: "x" },
 			], // Change in child - position adjusted for 4-space indent
 			annotations: [
-				mockParentTaskStatusChangeAnnotation.of(
+				taskStatusChangeAnnotation.of(
 					"autoCompleteParent.SOME_OTHER_ACTION"
 				),
 			], // Simulate annotation present
@@ -590,7 +589,7 @@ describe("handleParentTaskUpdateTransaction (Integration)", () => {
 		// Add a specific annotation value that includes 'autoCompleteParent'
 		// @ts-ignore
 		tr.annotation = jest.fn((type) => {
-			if (type === mockParentTaskStatusChangeAnnotation) {
+			if (type === taskStatusChangeAnnotation) {
 				return "autoCompleteParent.DONE"; // Simulate this transaction was caused by auto-complete
 			}
 			return undefined;
@@ -625,14 +624,14 @@ describe("handleParentTaskUpdateTransaction (Integration)", () => {
 				{ fromA: 21, toA: 22, fromB: 21, toB: 22, insertedText: "/" },
 			], // Child marked in progress
 			annotations: [
-				mockParentTaskStatusChangeAnnotation.of(
+				taskStatusChangeAnnotation.of(
 					"autoCompleteParent.SOME_OTHER_ACTION"
 				),
 			], // Simulate annotation present
 		});
 		// @ts-ignore
 		tr.annotation = jest.fn((type) => {
-			if (type === mockParentTaskStatusChangeAnnotation) {
+			if (type === taskStatusChangeAnnotation) {
 				return "autoCompleteParent.IN_PROGRESS"; // Simulate this transaction was caused by auto-complete
 			}
 			return undefined;
@@ -687,7 +686,7 @@ describe("handleParentTaskUpdateTransaction (Integration)", () => {
 		expect(parentChange.to).toBe(4);
 		expect(parentChange.insert).toBe("/"); // Should be in progress marker
 		expect(result.annotations).toEqual([
-			mockParentTaskStatusChangeAnnotation.of(
+			taskStatusChangeAnnotation.of(
 				"autoCompleteParent.IN_PROGRESS"
 			),
 		]);
@@ -771,12 +770,12 @@ describe("handleParentTaskUpdateTransaction (Integration)", () => {
 		expect(resultIndented.selection).toEqual(trIndented.selection);
 		// Verify no parent task status change annotation was added
 		expect(resultIndented.annotations).not.toEqual(
-			mockParentTaskStatusChangeAnnotation.of(
+			taskStatusChangeAnnotation.of(
 				"autoCompleteParent.COMPLETED"
 			)
 		);
 		expect((resultIndented as any).annotations).not.toEqual(
-			mockParentTaskStatusChangeAnnotation.of(
+			taskStatusChangeAnnotation.of(
 				"autoCompleteParent.IN_PROGRESS"
 			)
 		);

@@ -7,11 +7,11 @@ import {
 	WidgetType,
 } from "@codemirror/view";
 import { SearchCursor } from "@codemirror/search";
+import { RegExpCursor } from "@/editor-extensions/core/regex-cursor";
 import { App, Vault } from "obsidian";
 import { EditorState, Range, Text } from "@codemirror/state";
 // @ts-ignore - This import is necessary but TypeScript can't find it
 import { foldable, syntaxTree, tokenClassNodeProp } from "@codemirror/language";
-import { RegExpCursor } from "@/editor-extensions/core/regex-cursor";
 import TaskProgressBarPlugin from "@/index";
 import { shouldHideProgressBarInLivePriview } from "@/utils";
 import "../../styles/progressbar.scss";

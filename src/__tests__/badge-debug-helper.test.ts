@@ -307,7 +307,7 @@ describe("Badge Debug Helper", () => {
 			const task3 = createBadgeTask(
 				"calendar-1",
 				"Calendar 1",
-				new Date("2024-01-15T16:00:00Z"),
+				new Date("2024-01-15T15:00:00Z"),
 				"#ff6b6b"
 			); // Same source as task1
 

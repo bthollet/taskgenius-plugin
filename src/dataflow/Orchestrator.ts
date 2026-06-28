@@ -168,6 +168,7 @@ export class DataflowOrchestrator {
 				enableCustomDateFormats:
 					this.plugin.settings.enableCustomDateFormats,
 				customDateFormats: this.plugin.settings.customDateFormats,
+				taskStatuses: this.plugin.settings.taskStatuses,
 				// Include tag prefixes for custom dataview field support
 				projectTagPrefix: this.plugin.settings.projectTagPrefix,
 				contextTagPrefix: this.plugin.settings.contextTagPrefix,
@@ -178,6 +179,7 @@ export class DataflowOrchestrator {
 		// Ensure worker parser receives enhanced project config at init
 		taskWorkerManager.updateSettings({
 			projectConfig: this.plugin.settings.projectConfig,
+			taskStatuses: this.plugin.settings.taskStatuses,
 		});
 
 		const projectWorkerManager = new ProjectDataWorkerManager({
@@ -750,6 +752,7 @@ export class DataflowOrchestrator {
 									"tasks",
 								customDateFormats:
 									this.plugin.settings.customDateFormats,
+								taskStatuses: this.plugin.settings.taskStatuses,
 								fileMetadataInheritance:
 									this.plugin.settings
 										.fileMetadataInheritance,
@@ -973,6 +976,7 @@ export class DataflowOrchestrator {
 				taskWorkerManager.updateSettings({
 					preferMetadataFormat: settings.preferMetadataFormat,
 					customDateFormats: settings.customDateFormats,
+					taskStatuses: settings.taskStatuses,
 					fileMetadataInheritance: settings.fileMetadataInheritance,
 					projectConfig: settings.projectConfig,
 					ignoreHeading: settings.ignoreHeading,
@@ -1405,6 +1409,7 @@ export class DataflowOrchestrator {
 							"tasks",
 						customDateFormats:
 							this.plugin.settings.customDateFormats,
+						taskStatuses: this.plugin.settings.taskStatuses,
 						fileMetadataInheritance:
 							this.plugin.settings.fileMetadataInheritance,
 						projectConfig: this.plugin.settings.projectConfig,

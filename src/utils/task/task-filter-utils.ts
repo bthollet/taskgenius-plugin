@@ -12,6 +12,7 @@ import {
 	RootFilterState,
 } from "@/components/features/task/filter/ViewTaskFilter";
 import { hasProject } from "./task-operations";
+import { isClosedStatusMark } from "@/modules/view-tasks/closedStatusPredicate";
 
 // 从ViewTaskFilter.ts导入相关接口
 
@@ -86,15 +87,10 @@ export function isNotCompleted(
 	viewId: ViewMode,
 ): boolean {
 	const viewConfig = getViewSettingOrDefault(plugin, viewId);
-	const abandonedStatus = plugin.settings.taskStatuses.abandoned.split("|");
-	const completedStatus = plugin.settings.taskStatuses.completed.split("|");
+	const taskStatuses = plugin.settings.taskStatuses;
 
 	if (viewConfig.hideCompletedAndAbandonedTasks) {
-		return (
-			!task.completed &&
-			!abandonedStatus.includes(task.status.toLowerCase()) &&
-			!completedStatus.includes(task.status.toLowerCase())
-		);
+		return !task.completed && !isClosedStatusMark(task.status, taskStatuses);
 	}
 
 	return true;

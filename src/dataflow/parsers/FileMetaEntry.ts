@@ -22,7 +22,8 @@ export async function parseFileMeta(
   // Create parser with project detection disabled (pass undefined for detection methods)
   const parser = new FileMetadataTaskParser(
     plugin.settings.fileParsingConfig,
-    undefined // No project detection methods - handled by ProjectResolver
+    undefined, // No project detection methods - handled by ProjectResolver
+    plugin.settings.taskStatuses
   );
   
   const { tasks } = parser.parseFileForTasks(filePath, fileContent, fileCache);

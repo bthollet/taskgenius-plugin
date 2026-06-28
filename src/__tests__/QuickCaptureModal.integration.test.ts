@@ -118,7 +118,7 @@ jest.mock("../utils/file/file-operations", () => ({
 	processDateTemplates: jest.fn(),
 }));
 
-jest.mock("../components/AutoComplete", () => ({
+jest.mock("@/components/ui/inputs/AutoComplete", () => ({
 	FileSuggest: jest.fn(),
 	ContextSuggest: jest.fn(),
 	ProjectSuggest: jest.fn(),
@@ -128,7 +128,7 @@ jest.mock("../translations/helper", () => ({
 	t: (key: string) => key,
 }));
 
-jest.mock("../components/MarkdownRenderer", () => ({
+jest.mock("@/components/ui/renderers/MarkdownRenderer", () => ({
 	MarkdownRendererComponent: class MockMarkdownRenderer {
 		constructor() {}
 		render() {}
@@ -136,7 +136,7 @@ jest.mock("../components/MarkdownRenderer", () => ({
 	},
 }));
 
-jest.mock("../components/StatusComponent", () => ({
+jest.mock("@/components/ui/feedback/StatusIndicator", () => ({
 	StatusComponent: class MockStatusComponent {
 		constructor() {}
 		load() {}

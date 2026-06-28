@@ -620,12 +620,70 @@ describe('CanvasTaskUpdater', () => {
             const updatedCanvasData = JSON.parse(updatedContent!);
             const updatedNode = updatedCanvasData.nodes.find((n: any) => n.id === 'identical-tasks-node');
 
-            // Check that only the task with #SO/旅行 was updated
-            expect(updatedNode.text).toContain('- [ ] Task In Canvas 📅 2025-06-21'); // Should remain unchanged
-            expect(updatedNode.text).toContain('- [ ] Task In Canvas 🛫 2025-06-21'); // Should remain unchanged
-            expect(updatedNode.text).toContain('- [x] Task In Canvas #SO/旅行'); // Should be updated
-            expect(updatedNode.text).toContain('- [ ] Task In Canvas'); // Should remain unchanged (plain task)
-            expect(updatedNode.text).toContain('- [ ] A new day'); // Should remain unchanged
+            // Check exact lines so the plain task assertion cannot be satisfied by metadata variants
+            expect(updatedNode.text.split('\n')).toEqual([
+                '# Tasks with Same Names',
+                '',
+                '- [ ] Task In Canvas 📅 2025-06-21',
+                '- [ ] Task In Canvas 🛫 2025-06-21',
+                '- [x] Task In Canvas #SO/旅行',
+                '- [ ] Task In Canvas',
+                '- [ ] A new day'
+            ]);
+        });
+
+        it('should not use fallback when stripped content matches multiple Canvas lines', async () => {
+            const ambiguousCanvasData: CanvasData = {
+                nodes: [
+                    {
+                        id: 'ambiguous-tasks-node',
+                        type: 'text',
+                        text: '# Ambiguous Tasks\n\n- [ ] Task In Canvas 📅 2025-06-21\n- [ ] Task In Canvas 🛫 2025-06-21\n- [ ] Task In Canvas',
+                        x: 100,
+                        y: 100,
+                        width: 350,
+                        height: 220,
+                    }
+                ],
+                edges: []
+            };
+
+            mockVault.setFileContent('ambiguous-tasks.canvas', JSON.stringify(ambiguousCanvasData, null, 2));
+
+            const originalTask: Task<CanvasTaskMetadata> = {
+                id: 'ambiguous-test',
+                content: 'Task In Canvas',
+                filePath: 'ambiguous-tasks.canvas',
+                line: 0,
+                completed: false,
+                status: ' ',
+                originalMarkdown: '- [ ] Task In Canvas #missing',
+                metadata: {
+                    tags: ['#missing'],
+                    children: [],
+                    sourceType: 'canvas',
+                    canvasNodeId: 'ambiguous-tasks-node'
+                }
+            };
+
+            const result = await updater.updateCanvasTask(originalTask, {
+                ...originalTask,
+                completed: true,
+                status: 'x'
+            });
+
+            expect(result.success).toBe(false);
+            expect(result.error).toContain('Ambiguous Canvas task fallback match');
+
+            const unchangedCanvasData = JSON.parse(mockVault.getFileContent('ambiguous-tasks.canvas')!);
+            const unchangedNode = unchangedCanvasData.nodes.find((n: any) => n.id === 'ambiguous-tasks-node');
+            expect(unchangedNode.text.split('\n')).toEqual([
+                '# Ambiguous Tasks',
+                '',
+                '- [ ] Task In Canvas 📅 2025-06-21',
+                '- [ ] Task In Canvas 🛫 2025-06-21',
+                '- [ ] Task In Canvas'
+            ]);
         });
 
         it('should properly remove and add metadata without affecting other tasks', async () => {
@@ -818,10 +876,130 @@ describe('CanvasTaskUpdater', () => {
             expect(updatedNode.text).toContain('- [ ] Another task'); // Should remain unchanged
             expect(updatedNode.text).toContain('- [x] Completed task'); // Should remain unchanged
 
-            // Verify completion date was added
-            const today = new Date();
-            const expectedDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+            // Verify completion date was added from the explicit updated task timestamp
+            const expectedDate = new Date(updatedTask.metadata.completedDate!).toISOString().split('T')[0];
             expect(updatedNode.text).toContain(`✅ ${expectedDate}`);
+        });
+    });
+
+    describe('duplicateCanvasTask', () => {
+        const today = new Date().toISOString().split('T')[0];
+
+        const createCanvasTask = (status: string, content: string): Task<CanvasTaskMetadata> => ({
+            id: `task-${status}-${content}`,
+            content,
+            filePath: 'duplicate-test.canvas',
+            line: 0,
+            completed: false,
+            status,
+            originalMarkdown: `- [${status}] ${content}`,
+            metadata: {
+                tags: [],
+                children: [],
+                sourceType: 'canvas',
+                canvasNodeId: 'node-1'
+            }
+        });
+
+        beforeEach(() => {
+            mockPlugin.settings = {
+                ...mockPlugin.settings,
+                taskStatuses: {
+                    completed: 'x|✓|done',
+                    abandoned: '-',
+                    inProgress: '/',
+                    planned: '?',
+                    notStarted: ' '
+                },
+                taskStatusMarks: {
+                    'x': 'completed',
+                    'X': 'completed',
+                    '✓': 'completed',
+                    'done': 'completed',
+                    '-': 'abandoned',
+                    '/': 'inProgress'
+                }
+            } as any;
+
+            mockVault.setFileContent('duplicate-test.canvas', JSON.stringify({
+                nodes: [
+                    {
+                        id: 'node-1',
+                        type: 'text',
+                        text: '# Duplicate Target',
+                        x: 100,
+                        y: 100,
+                        width: 300,
+                        height: 200
+                    }
+                ],
+                edges: []
+            }, null, 2));
+        });
+
+        it('should reset default closed statuses when duplicating Canvas tasks', async () => {
+            for (const status of ['x', 'X', '-']) {
+                mockVault.setFileContent('duplicate-test.canvas', JSON.stringify({
+                    nodes: [
+                        {
+                            id: 'node-1',
+                            type: 'text',
+                            text: '# Duplicate Target',
+                            x: 100,
+                            y: 100,
+                            width: 300,
+                            height: 200
+                        }
+                    ],
+                    edges: []
+                }, null, 2));
+
+                const result = await updater.duplicateCanvasTask(
+                    createCanvasTask(status, `Default ${status} task`),
+                    'duplicate-test.canvas',
+                    'node-1'
+                );
+
+                expect(result.success).toBe(true);
+                const updatedCanvasData = JSON.parse(mockVault.getFileContent('duplicate-test.canvas')!);
+                const updatedNode = updatedCanvasData.nodes.find((n: any) => n.id === 'node-1');
+                expect(updatedNode.text).toContain(`- [ ] Default ${status} task (duplicated ${today})`);
+            }
+        });
+
+        it('should reset configured custom completed statuses when duplicating Canvas tasks', async () => {
+            await updater.duplicateCanvasTask(
+                createCanvasTask('✓', 'Checkmark task'),
+                'duplicate-test.canvas',
+                'node-1'
+            );
+            await updater.duplicateCanvasTask(
+                createCanvasTask('done', 'Done alias task'),
+                'duplicate-test.canvas',
+                'node-1'
+            );
+
+            const updatedCanvasData = JSON.parse(mockVault.getFileContent('duplicate-test.canvas')!);
+            const updatedNode = updatedCanvasData.nodes.find((n: any) => n.id === 'node-1');
+
+            expect(updatedNode.text).toContain(`- [ ] Checkmark task (duplicated ${today})`);
+            expect(updatedNode.text).toContain(`- [ ] Done alias task (duplicated ${today})`);
+            expect(updatedNode.text).not.toContain(`- [✓] Checkmark task (duplicated ${today})`);
+            expect(updatedNode.text).not.toContain(`- [done] Done alias task (duplicated ${today})`);
+        });
+
+        it('should not reset non-closed in-progress statuses when duplicating Canvas tasks', async () => {
+            const result = await updater.duplicateCanvasTask(
+                createCanvasTask('/', 'In progress task'),
+                'duplicate-test.canvas',
+                'node-1'
+            );
+
+            expect(result.success).toBe(true);
+            const updatedCanvasData = JSON.parse(mockVault.getFileContent('duplicate-test.canvas')!);
+            const updatedNode = updatedCanvasData.nodes.find((n: any) => n.id === 'node-1');
+            expect(updatedNode.text).toContain(`- [/] In progress task (duplicated ${today})`);
+            expect(updatedNode.text).not.toContain(`- [ ] In progress task (duplicated ${today})`);
         });
     });
 });

@@ -26,6 +26,14 @@ import { rrulestr } from "rrule";
 import { EMOJI_TAG_REGEX, TOKEN_CONTEXT_REGEX } from "@/common/regex-define";
 import { BulkOperationResult } from "@/types/selection";
 import { formatDate as formatDateSmart } from "@/utils/date/date-utils";
+import {
+	getTaskStatusTransitionDecision,
+	type TaskStatusTransitionDecision,
+} from "@/modules/view-tasks/taskStatusTransitionDecision";
+import {
+	getPrimaryCompletedStatusMark,
+	isCompletedStatusMark,
+} from "@/modules/view-tasks/completedStatusPredicate";
 
 /**
  * Arguments for creating a task
@@ -96,6 +104,10 @@ export class WriteAPI {
 		this.writeQueue = Promise.resolve();
 	}
 
+	private getCompletedCheckboxState(): string {
+		return `[${getPrimaryCompletedStatusMark(this.plugin.settings.taskStatuses)}]`;
+	}
+
 	private enqueueWrite<T>(operation: () => Promise<T>): Promise<T> {
 		const run = this.writeQueue.catch(() => undefined).then(operation);
 
@@ -105,6 +117,127 @@ export class WriteAPI {
 		);
 
 		return run;
+	}
+
+	private getStatusTransitionDecision(
+		task: Task,
+		intent: { status?: string; completed?: boolean },
+	): TaskStatusTransitionDecision {
+		return getTaskStatusTransitionDecision({
+			currentStatus: task.status || " ",
+			currentCompleted: !!task.completed,
+			nextStatus: intent.status,
+			nextCompleted:
+				intent.status === undefined ? intent.completed : undefined,
+			taskStatuses: this.plugin.settings.taskStatuses,
+			autoDateManager: this.plugin.settings.autoDateManager,
+			hasRecurrence: !!task.metadata?.recurrence,
+		});
+	}
+
+	private getIcsStatusForTaskUpdate(
+		task: Task,
+		updates: Pick<Partial<Task>, "status" | "completed">,
+	): "COMPLETED" | "CANCELLED" | "CONFIRMED" {
+		const decision = this.getStatusTransitionDecision(task, {
+			status: updates.status,
+			completed: updates.completed,
+		});
+
+		if (decision.isCompletedStatus) {
+			return "COMPLETED";
+		}
+
+		if (decision.isAbandonedStatus) {
+			return "CANCELLED";
+		}
+
+		return "CONFIRMED";
+	}
+
+	private removeCompletionDateMetadata(taskLine: string): string {
+		return taskLine
+			.replace(/\s*\[completion::\s*[^\]]+\]/i, "")
+			.replace(
+				/\s*✅\s*\d{4}-\d{2}-\d{2}(?:\s+\d{1,2}:\d{2})?/,
+				"",
+			);
+	}
+
+	private removeCancelledDateMetadata(taskLine: string): string {
+		return taskLine
+			.replace(/\s*\[cancelled::\s*[^\]]+\]/i, "")
+			.replace(
+				/\s*❌\s*\d{4}-\d{2}-\d{2}(?:\s+\d{1,2}:\d{2})?/,
+				"",
+			);
+	}
+
+	private applyStatusTransitionDateEffects(
+		taskLine: string,
+		decision: TaskStatusTransitionDecision,
+		options: { skipAddCompletedDate?: boolean } = {},
+	): string {
+		if (decision.removeCompletedDate) {
+			taskLine = this.removeCompletionDateMetadata(taskLine);
+		}
+
+		if (decision.removeCancelledDate) {
+			taskLine = this.removeCancelledDateMetadata(taskLine);
+		}
+
+		if (decision.addCompletedDate && !options.skipAddCompletedDate) {
+			const hasCompletionMeta = /(\[completion::|✅)/.test(taskLine);
+			if (!hasCompletionMeta) {
+				const completionDate = moment().format("YYYY-MM-DD");
+				const useDataviewFormat =
+					this.plugin.settings.preferMetadataFormat === "dataview";
+				const completionMeta = useDataviewFormat
+					? `[completion:: ${completionDate}]`
+					: `✅ ${completionDate}`;
+				taskLine = this.insertDateAtCorrectPosition(
+					taskLine,
+					completionMeta,
+					"completed",
+				);
+			}
+		}
+
+		if (decision.addCancelledDate) {
+			const hasCancelledMeta = /(\[cancelled::|❌)/.test(taskLine);
+			if (!hasCancelledMeta) {
+				const cancelledDate = moment().format("YYYY-MM-DD");
+				const useDataviewFormat =
+					this.plugin.settings.preferMetadataFormat === "dataview";
+				const cancelledMeta = useDataviewFormat
+					? `[cancelled:: ${cancelledDate}]`
+					: `❌ ${cancelledDate}`;
+				taskLine = this.insertDateAtCorrectPosition(
+					taskLine,
+					cancelledMeta,
+					"cancelled",
+				);
+			}
+		}
+
+		if (decision.addStartDate) {
+			const hasStartMeta = /(\[start::|🛫|🚀)/.test(taskLine);
+			if (!hasStartMeta) {
+				const startDate = moment().format("YYYY-MM-DD");
+				const useDataviewFormat =
+					this.plugin.settings.preferMetadataFormat === "dataview";
+				const startMeta = useDataviewFormat
+					? `[start:: ${startDate}]`
+					: `🛫 ${startDate}`;
+				taskLine = this.insertDateAtCorrectPosition(
+					taskLine,
+					startMeta,
+					"start",
+				);
+			}
+		}
+
+		return taskLine;
 	}
 
 	/**
@@ -157,118 +290,45 @@ export class WriteAPI {
 			let taskLine = lines[task.line];
 
 			// Update status or completion (support both status symbol and completed boolean)
-			const configuredCompleted = (
-				this.plugin.settings.taskStatuses?.completed || "x"
-			).split("|")[0];
-			const willComplete =
-				args.completed === true ||
-				(args.status !== undefined &&
-					((typeof (args.status as any).toLowerCase === "function" &&
-						(args.status as any).toLowerCase() === "x") ||
-						args.status === configuredCompleted));
-			// Determine mark to write to checkbox
-			const markToWrite =
-				args.status !== undefined
-					? (args.status as string)
-					: willComplete
-						? "x"
-						: " ";
+			const decision = this.getStatusTransitionDecision(task, args);
+			const markToWrite = decision.status;
 			taskLine = taskLine.replace(
 				/(\s*[-*+]\s*\[)[^\]]*(\]\s*)/,
 				`$1${markToWrite}$2`,
 			);
-			// Handle date writing based on status changes
-			const previousMark = task.status || " ";
-			const isCompleting = willComplete && !task.completed;
-			const isAbandoning = markToWrite === "-" && previousMark !== "-";
-			const isStarting =
-				(markToWrite === ">" || markToWrite === "/") &&
-				(previousMark === " " || previousMark === "?");
-
-			// Add completion date if completing and not already present
-			if (isCompleting) {
-				const hasCompletionMeta = /(\[completion::|✅)/.test(taskLine);
-				if (!hasCompletionMeta) {
-					const completionDate = moment().format("YYYY-MM-DD");
-					const useDataviewFormat =
-						this.plugin.settings.preferMetadataFormat ===
-						"dataview";
-					const completionMeta = useDataviewFormat
-						? `[completion:: ${completionDate}]`
-						: `✅ ${completionDate}`;
-					taskLine = this.insertDateAtCorrectPosition(
-						taskLine,
-						completionMeta,
-						"completed",
-					);
-				}
-			}
-
-			// Add cancelled date if abandoning
-			if (
-				isAbandoning &&
-				this.plugin.settings.autoDateManager?.manageCancelledDate
-			) {
-				const hasCancelledMeta = /(\[cancelled::|❌)/.test(taskLine);
-				if (!hasCancelledMeta) {
-					const cancelledDate = moment().format("YYYY-MM-DD");
-					const useDataviewFormat =
-						this.plugin.settings.preferMetadataFormat ===
-						"dataview";
-					const cancelledMeta = useDataviewFormat
-						? `[cancelled:: ${cancelledDate}]`
-						: `❌ ${cancelledDate}`;
-					taskLine = this.insertDateAtCorrectPosition(
-						taskLine,
-						cancelledMeta,
-						"cancelled",
-					);
-				}
-			}
-
-			// Add start date if starting
-			if (
-				isStarting &&
-				this.plugin.settings.autoDateManager?.manageStartDate
-			) {
-				const hasStartMeta = /(\[start::|🛫|🚀)/.test(taskLine);
-				if (!hasStartMeta) {
-					const startDate = moment().format("YYYY-MM-DD");
-					const useDataviewFormat =
-						this.plugin.settings.preferMetadataFormat ===
-						"dataview";
-					const startMeta = useDataviewFormat
-						? `[start:: ${startDate}]`
-						: `🛫 ${startDate}`;
-					taskLine = this.insertDateAtCorrectPosition(
-						taskLine,
-						startMeta,
-						"start",
-					);
-				}
-			}
+			taskLine = this.applyStatusTransitionDateEffects(
+				taskLine,
+				decision,
+			);
 
 			lines[task.line] = taskLine;
 
 			// If completing a recurring task, insert the next occurrence right after
-			const isCompletingRecurringTask =
-				willComplete && !task.completed && task.metadata?.recurrence;
-			if (isCompletingRecurringTask) {
+			if (decision.shouldCreateRecurringInstance) {
 				try {
 					const indentMatch = taskLine.match(/^(\s*)/);
 					const indentation = indentMatch ? indentMatch[0] : "";
-					const newTaskLine = this.createRecurringTask(
-						{
-							...task,
-							completed: true,
-							metadata: {
-								...task.metadata,
-								completedDate: Date.now(),
-							},
-						} as Task,
-						indentation,
-					);
-					lines.splice(task.line + 1, 0, newTaskLine);
+
+					// Check if next recurring instance already exists (prevents duplicates when unchecking then rechecking)
+					const nextLineExists = task.line + 1 < lines.length;
+					const nextLine = nextLineExists ? lines[task.line + 1] : "";
+					const hasExistingRecurringInstance = nextLineExists &&
+						this.isMatchingRecurringTask(nextLine, task.content, task.metadata?.recurrence);
+
+					if (!hasExistingRecurringInstance) {
+						const newTaskLine = this.createRecurringTask(
+							{
+								...task,
+								completed: true,
+								metadata: {
+									...task.metadata,
+									completedDate: Date.now(),
+								},
+							} as Task,
+							indentation,
+						);
+						lines.splice(task.line + 1, 0, newTaskLine);
+					}
 				} catch (e) {
 					console.error(
 						"WriteAPI: failed to create next recurring task from updateTaskStatus:",
@@ -289,8 +349,8 @@ export class WriteAPI {
 			});
 
 			// Trigger task-completed event if task was just completed
-			if (args.completed === true && !task.completed) {
-				const updatedTask = { ...task, completed: true };
+			if (decision.shouldTriggerCompletionEvent) {
+				const updatedTask = { ...task, status: decision.status, completed: decision.completed };
 				this.app.workspace.trigger(
 					"task-genius:task-completed",
 					updatedTask,
@@ -360,106 +420,31 @@ export class WriteAPI {
 				return { success: false, error: "Invalid line number" };
 			}
 
-			const updatedTask = { ...originalTask, ...args.updates };
+				const updatedTask = { ...originalTask, ...args.updates };
 			let taskLine = lines[originalTask.line];
 
-			// Track previous status for date management
-			const previousStatus = originalTask.status || " ";
-			let newStatus = previousStatus;
+			const decision = this.getStatusTransitionDecision(originalTask, {
+				status: args.updates.status,
+				completed: args.updates.completed,
+			});
 
 			// Update checkbox status or status mark
-			if (args.updates.status !== undefined) {
-				// Prefer explicit status mark if provided
-				const statusMark = args.updates.status as string;
-				newStatus = statusMark;
+			if (
+				args.updates.status !== undefined ||
+				args.updates.completed !== undefined
+			) {
 				taskLine = taskLine.replace(
 					/(\s*[-*+]\s*\[)[^\]]*(\]\s*)/,
-					`$1${statusMark}$2`,
+					`$1${decision.status}$2`,
 				);
-			} else if (args.updates.completed !== undefined) {
-				// Fallback to setting based on completed boolean
-				const statusMark = args.updates.completed ? "x" : " ";
-				newStatus = statusMark;
-				taskLine = taskLine.replace(
-					/(\s*[-*+]\s*\[)[^\]]*(\]\s*)/,
-					`$1${statusMark}$2`,
+				taskLine = this.applyStatusTransitionDateEffects(
+					taskLine,
+					decision,
+					{
+						skipAddCompletedDate:
+							args.updates.metadata?.completedDate !== undefined,
+					},
 				);
-			}
-
-			// Handle date writing based on status changes
-			const configuredCompleted = (
-				this.plugin.settings.taskStatuses?.completed || "x"
-			).split("|")[0];
-			const isCompleting =
-				(newStatus === "x" || newStatus === configuredCompleted) &&
-				previousStatus !== "x" &&
-				previousStatus !== configuredCompleted;
-			const isAbandoning = newStatus === "-" && previousStatus !== "-";
-			const isStarting =
-				(newStatus === ">" || newStatus === "/") &&
-				(previousStatus === " " || previousStatus === "?");
-
-			// Add completion date if completing
-			if (isCompleting && !args.updates.metadata?.completedDate) {
-				const hasCompletionMeta = /(\[completion::|✅)/.test(taskLine);
-				if (!hasCompletionMeta) {
-					const completionDate = moment().format("YYYY-MM-DD");
-					const useDataviewFormat =
-						this.plugin.settings.preferMetadataFormat ===
-						"dataview";
-					const completionMeta = useDataviewFormat
-						? `[completion:: ${completionDate}]`
-						: `✅ ${completionDate}`;
-					taskLine = this.insertDateAtCorrectPosition(
-						taskLine,
-						completionMeta,
-						"completed",
-					);
-				}
-			}
-
-			// Add cancelled date if abandoning
-			if (
-				isAbandoning &&
-				this.plugin.settings.autoDateManager?.manageCancelledDate
-			) {
-				const hasCancelledMeta = /(\[cancelled::|❌)/.test(taskLine);
-				if (!hasCancelledMeta) {
-					const cancelledDate = moment().format("YYYY-MM-DD");
-					const useDataviewFormat =
-						this.plugin.settings.preferMetadataFormat ===
-						"dataview";
-					const cancelledMeta = useDataviewFormat
-						? `[cancelled:: ${cancelledDate}]`
-						: `❌ ${cancelledDate}`;
-					taskLine = this.insertDateAtCorrectPosition(
-						taskLine,
-						cancelledMeta,
-						"cancelled",
-					);
-				}
-			}
-
-			// Add start date if starting
-			if (
-				isStarting &&
-				this.plugin.settings.autoDateManager?.manageStartDate
-			) {
-				const hasStartMeta = /(\[start::|🛫|🚀)/.test(taskLine);
-				if (!hasStartMeta) {
-					const startDate = moment().format("YYYY-MM-DD");
-					const useDataviewFormat =
-						this.plugin.settings.preferMetadataFormat ===
-						"dataview";
-					const startMeta = useDataviewFormat
-						? `[start:: ${startDate}]`
-						: `🛫 ${startDate}`;
-					taskLine = this.insertDateAtCorrectPosition(
-						taskLine,
-						startMeta,
-						"start",
-					);
-				}
 			}
 
 			// Update content if changed (but prevent clearing content)
@@ -715,8 +700,9 @@ export class WriteAPI {
 								...args.updates.metadata,
 							} as any;
 							const completedFlag =
+								args.updates.status !== undefined ||
 								args.updates.completed !== undefined
-									? !!args.updates.completed
+									? decision.completed
 									: !!originalTask.completed;
 							const newMetadata = this.generateMetadata({
 								tags: mergedMd.tags,
@@ -743,34 +729,39 @@ export class WriteAPI {
 
 			lines[originalTask.line] = taskLine;
 
-			// Check if this is a completion of a recurring task
-			const isCompletingRecurringTask =
-				!originalTask.completed &&
-				args.updates.completed === true &&
-				originalTask.metadata?.recurrence;
-
 			// If this is a completed recurring task, create a new task with updated dates
-			if (isCompletingRecurringTask) {
+			if (decision.shouldCreateRecurringInstance) {
 				try {
 					const indentMatch = taskLine.match(/^(\s*)/);
 					const indentation = indentMatch ? indentMatch[0] : "";
-					const newTaskLine = this.createRecurringTask(
-						{
-							...originalTask,
-							...args.updates,
-							metadata: {
-								...originalTask.metadata,
-								...(args.updates.metadata || {}),
-							},
-						} as Task,
-						indentation,
-					);
 
-					// Insert the new task line after the current task
-					lines.splice(originalTask.line + 1, 0, newTaskLine);
-					console.log(
-						`Created new recurring task after line ${originalTask.line}`,
-					);
+					// Check if next recurring instance already exists (prevents duplicates when unchecking then rechecking)
+					const nextLineExists = originalTask.line + 1 < lines.length;
+					const nextLine = nextLineExists ? lines[originalTask.line + 1] : "";
+					const hasExistingRecurringInstance = nextLineExists &&
+						this.isMatchingRecurringTask(nextLine, originalTask.content, originalTask.metadata?.recurrence);
+
+					if (!hasExistingRecurringInstance) {
+						const newTaskLine = this.createRecurringTask(
+							{
+								...originalTask,
+								...args.updates,
+								status: decision.status,
+								completed: decision.completed,
+								metadata: {
+									...originalTask.metadata,
+									...(args.updates.metadata || {}),
+								},
+							} as Task,
+							indentation,
+						);
+
+						// Insert the new task line after the current task
+						lines.splice(originalTask.line + 1, 0, newTaskLine);
+						console.log(
+							`Created new recurring task after line ${originalTask.line}`,
+						);
+					}
 				} catch (error) {
 					console.error("Error creating recurring task:", error);
 				}
@@ -787,6 +778,10 @@ export class WriteAPI {
 			const updatedTaskObj: Task = {
 				...originalTask,
 				...args.updates,
+					...(args.updates.status !== undefined ||
+					args.updates.completed !== undefined
+						? { status: decision.status, completed: decision.completed }
+						: {}),
 				metadata: {
 					...originalTask.metadata,
 					...(args.updates.metadata || {}),
@@ -801,7 +796,7 @@ export class WriteAPI {
 			});
 
 			// Trigger task-completed event if task was just completed
-			if (args.updates.completed === true && !originalTask.completed) {
+			if (decision.shouldTriggerCompletionEvent) {
 				this.app.workspace.trigger(
 					"task-genius:task-completed",
 					updatedTaskObj,
@@ -1326,7 +1321,7 @@ export class WriteAPI {
 			const content = await this.vault.read(file);
 
 			// Build task content
-			const checkboxState = args.completed ? "[x]" : "[ ]";
+			const checkboxState = args.completed ? this.getCompletedCheckboxState() : "[ ]";
 			let taskContent = `- ${checkboxState} ${args.content}`;
 			const metadata = this.generateMetadata({
 				tags: args.tags,
@@ -1888,7 +1883,7 @@ export class WriteAPI {
 			}
 
 			// Build task content
-			const checkboxState = args.completed ? "[x]" : "[ ]";
+			const checkboxState = args.completed ? this.getCompletedCheckboxState() : "[ ]";
 			let taskContent = `- ${checkboxState} ${args.content}`;
 			const metadata = this.generateMetadata({
 				tags: args.tags,
@@ -2010,7 +2005,7 @@ export class WriteAPI {
 			}
 
 			// Build task line
-			const checkboxState = args.completed ? "[x]" : "[ ]";
+			const checkboxState = args.completed ? this.getCompletedCheckboxState() : "[ ]";
 			let line = `- ${checkboxState} ${args.content}`;
 			const metadata = this.generateMetadata({
 				tags: args.tags,
@@ -2575,7 +2570,7 @@ export class WriteAPI {
 	}): Promise<{ success: boolean; error?: string }> {
 		try {
 			// Format task content with checkbox
-			const checkboxState = args.completed ? "[x]" : "[ ]";
+			const checkboxState = args.completed ? this.getCompletedCheckboxState() : "[ ]";
 			let taskContent = `- ${checkboxState} ${args.content}`;
 
 			// Add metadata if provided
@@ -2773,6 +2768,34 @@ export class WriteAPI {
 		}
 
 		return newTaskLine;
+	}
+
+	private isMatchingRecurringTask(
+		line: string,
+		originalContent: string,
+		recurrence: string | undefined,
+	): boolean {
+		if (!recurrence) return false;
+
+		const taskMatch = line.match(/^\s*[-*+]\s*\[(.)\]\s*(.*)/);
+		if (!taskMatch) return false;
+
+		const status = taskMatch[1];
+		const lineContent = taskMatch[2];
+
+		if (isCompletedStatusMark(status, this.plugin.settings.taskStatuses)) return false;
+
+		const hasRecurrence = lineContent.includes("🔁") ||
+			lineContent.includes("[repeat::") ||
+			lineContent.includes(recurrence);
+
+		const contentWithoutMeta = originalContent.replace(/\s*[🔺⏫🔼🔽⏬🛫⏳📅✅🔁❌].*$/, "").trim();
+		const lineContentWithoutMeta = lineContent.replace(/\s*[🔺⏫🔼🔽⏬🛫⏳📅✅🔁❌].*$/, "").trim();
+
+		const lineContentClean = lineContentWithoutMeta.replace(/\s*\[[^\]]+::[^\]]*\]/g, "").trim();
+		const contentClean = contentWithoutMeta.replace(/\s*\[[^\]]+::[^\]]*\]/g, "").trim();
+
+		return hasRecurrence && (lineContentClean.includes(contentClean) || contentClean.includes(lineContentClean));
 	}
 
 	/**
@@ -3109,22 +3132,12 @@ export class WriteAPI {
 				updates.completed !== undefined ||
 				updates.status !== undefined
 			) {
-				// Map task completion to ICS status
-				const isCompleted =
-					updates.completed ??
-					(updates.status === "x" ||
-						updates.status ===
-							this.plugin.settings.taskStatuses?.completed?.split(
-								"|",
-							)[0]);
-
-				if (isCompleted) {
-					updatedEvent.status = "COMPLETED";
-				} else if (updates.status === "-") {
-					updatedEvent.status = "CANCELLED";
-				} else {
-					updatedEvent.status = "CONFIRMED";
-				}
+				// Status marks are authoritative when supplied; otherwise preserve
+				// completed-boolean behavior for ICS status updates.
+				updatedEvent.status = this.getIcsStatusForTaskUpdate(
+					originalTask,
+					updates,
+				);
 			}
 
 			// Call IcsManager to update the event

@@ -24,7 +24,7 @@ describe('TaskMetadataUtils', () => {
 			expect(result.hour).toBe(14);
 			expect(result.minute).toBe(30);
 			expect(result.second).toBe(45);
-			expect(result.originalText).toBe('14:30');
+			expect(result.originalText).toBe('14:30:45');
 			expect(result.isRange).toBe(false);
 		});
 
@@ -34,7 +34,7 @@ describe('TaskMetadataUtils', () => {
 
 			expect(result.hour).toBe(0);
 			expect(result.minute).toBe(0);
-			expect(result.second).toBe(0);
+			expect(result.second).toBeUndefined();
 			expect(result.originalText).toBe('00:00');
 		});
 	});

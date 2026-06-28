@@ -56,6 +56,8 @@ export const getConfig = (
 			key: "K",
 		},
 
+		taskStatuses: plugin?.settings?.taskStatuses,
+
 		// Emoji to metadata mapping
 		emojiMapping: {
 			"📅": "dueDate",
