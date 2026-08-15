@@ -12,6 +12,7 @@
 		"compile-i18n": "node scripts/compile-i18n.mjs",
 		"test": "jest",
 		"test:watch": "jest --watch",
+		"test:perf": "cross-env TG_PERF=1 jest --testPathPattern=[Pp]erformance",
 		"prepare": "husky",
 		"release": "release-it",
 		"release:patch": "release-it patch",

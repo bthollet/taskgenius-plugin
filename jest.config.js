@@ -9,12 +9,23 @@ const localMetadataPathIgnorePatterns = [
 	"<rootDir>/.rebon/",
 ];
 
+// Les suites de performance affirment des durees d'horloge murale sur un
+// materiel non specifie : la grandeur mesuree n'est pas reproductible, elle ne
+// peut donc pas servir de critere d'echec. Leur valeur est dans les mesures
+// qu'elles journalisent, pas dans leurs assertions. Elles sont exclues de la
+// suite bloquante et relancees separement par `pnpm run test:perf`.
+const performanceTestPattern =
+	"<rootDir>/src/__tests__/.*[Pp]erformance.*\\.test\\.ts$";
+const runPerformanceTests = process.env.TG_PERF === "1";
+
 module.exports = {
 	preset: "ts-jest",
 	testEnvironment: "jsdom",
 	roots: ["<rootDir>/src"],
 	testMatch: ["**/__tests__/**/*.test.ts"],
-	testPathIgnorePatterns: localMetadataPathIgnorePatterns,
+	testPathIgnorePatterns: runPerformanceTests
+		? localMetadataPathIgnorePatterns
+		: [...localMetadataPathIgnorePatterns, performanceTestPattern],
 	modulePathIgnorePatterns: localMetadataPathIgnorePatterns,
 	watchPathIgnorePatterns: localMetadataPathIgnorePatterns,
 	moduleNameMapper: {

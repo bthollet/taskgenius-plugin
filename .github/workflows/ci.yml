@@ -69,6 +69,13 @@ jobs:
             - name: Run tests
               run: pnpm exec jest --ci
 
+            # Informatif : ces suites mesurent des durees d'horloge murale sur
+            # un runner partage, donc non reproductibles. Elles ne peuvent pas
+            # bloquer la CI, mais leurs mesures restent consultables dans le log.
+            - name: Run performance suites (non bloquant)
+              continue-on-error: true
+              run: pnpm run test:perf
+
             - name: Upload build artifacts
               uses: actions/upload-artifact@v4
               with:
