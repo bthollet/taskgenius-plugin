@@ -203,7 +203,7 @@ export class WorkspaceSelector {
 					this.plugin.app.setting.open();
 					// @ts-ignore
 					this.plugin.app.setting.openTabById(
-						"obsidian-task-progress-bar"
+						this.plugin.manifest.id
 					);
 
 					setTimeout(() => {

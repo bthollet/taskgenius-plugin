@@ -185,7 +185,7 @@ export default class TaskProgressBarPlugin extends Plugin {
 
 	async onload() {
 		console.time("[Task Genius] onload");
-		await initializeTranslations();
+		await initializeTranslations(this.manifest.id);
 		await this.loadSettings();
 
 		// Initialize version manager first

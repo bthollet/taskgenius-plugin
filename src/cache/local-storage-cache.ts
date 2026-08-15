@@ -14,8 +14,17 @@ export interface Cached<T> {
 export class LocalStorageCache {
 	/** Main storage instance */
 	public persister: LocalForage;
-	/** Storage namespace prefix */
-	private readonly cachePrefix = "taskgenius/cache/";
+	/**
+	 * Prefixe de l'espace de noms IndexedDB.
+	 *
+	 * Il est volontairement distinct de celui du plugin amont
+	 * ("taskgenius/cache/"). L'espace de noms n'est construit qu'a partir de
+	 * app.appId, qui identifie le coffre et non le plugin : sans cette
+	 * distinction, ce fork et le plugin d'origine actives dans le meme coffre
+	 * partageraient la meme base et les memes cles, et s'invalideraient
+	 * mutuellement leur index a chaque changement de version.
+	 */
+	private readonly cachePrefix = "task-genius-bt/cache/";
 	/** Whether initialization is complete */
 	private initialized = false;
 	/** Current plugin version for cache invalidation */

@@ -6,10 +6,14 @@ export type { TranslationKey } from "./types";
 const REMOTE_BASE_URL =
 	"https://raw.githubusercontent.com/Quorafind/Obsidian-Task-Progress-Bar/master/i18n";
 
+// L'identifiant du plugin ne doit pas etre code en dur : un fork le change
+// dans manifest.json et la recherche echouerait alors en silence, privant le
+// plugin de ses traductions distantes. Il est renseigne au chargement a partir
+// de manifest.id ; la valeur par defaut couvre les appels hors cycle de vie.
+let pluginId = "obsidian-task-progress-bar";
+
 function getPluginInstance() {
-	return (window as any).app?.plugins?.plugins?.[
-		"obsidian-task-progress-bar"
-	];
+	return (window as any).app?.plugins?.plugins?.[pluginId];
 }
 
 function getCacheDir(): string | undefined {
@@ -97,7 +101,10 @@ function refreshLocaleInBackground(locale: SupportedLocale): void {
 		.catch(() => { /* stale-while-revalidate: ignore background errors */ });
 }
 
-export async function initializeTranslations(): Promise<void> {
+export async function initializeTranslations(
+	id?: string
+): Promise<void> {
+	if (id) pluginId = id;
 	const currentLocale = moment.locale();
 	await translationManager.initializeLocale(currentLocale, loadTranslation);
 }
