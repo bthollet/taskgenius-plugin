@@ -1,5 +1,11 @@
 packages:
     - "packages/*"
 
+# pnpm 10 bloque par defaut les scripts de build des dependances. Sans cette
+# liste, `pnpm install` echoue sur une machine propre (ERR_PNPM_GIT_DEP_PREPARE_
+# NOT_ALLOWED) : @codemirror/language est une dependance git (fork lishid/
+# cm-language) qui doit executer son script de preparation pour etre utilisable.
+# Un poste dont le store est deja chaud ne voit pas l'erreur.
 onlyBuiltDependencies:
     - esbuild
+    - "@codemirror/language@https://codeload.github.com/lishid/cm-language/tar.gz/2d416d7835867d1b1e8d0e726b147fc1135c9f92"
