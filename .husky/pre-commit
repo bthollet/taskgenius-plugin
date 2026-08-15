@@ -1,1 +1,4 @@
-npm run build
+# Le typecheck, le bundle et les 1718 tests sont executes par la CI
+# (.github/workflows/ci.yml) a chaque push et chaque pull request.
+# Les rejouer ici couterait ~2 min par commit pour une garantie deja acquise.
+# Pour un controle local avant de pousser : pnpm exec tsc -noEmit -skipLibCheck && pnpm exec jest
