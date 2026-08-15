@@ -36,7 +36,8 @@ package-lock.json
 translation-templates
 ._data.json
 
-CLAUDE.md
+# CLAUDE.md est volontairement versionne sur ce fork (il l'etait pas en amont) :
+# c'est la memoire du projet, elle doit suivre le depot d'un poste a l'autre.
 .kiro
 .claude
 .codex
@@ -65,3 +66,6 @@ issues*
 
 # stray temp files accidentally written into the repo
 *tmp_index_diff.txt
+
+# Contexte local, propre a un poste : ne pas versionner
+CLAUDE.local.md
