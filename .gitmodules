@@ -1,6 +1,8 @@
 [submodule "packages/calendar"]
 	path = packages/calendar
 	url = https://github.com/taskgenius/calendar.git
+	branch = main
 [submodule "docs"]
 	path = docs
 	url = https://github.com/taskgenius/taskgenius-doc
+	branch = main
