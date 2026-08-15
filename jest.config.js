@@ -1,3 +1,8 @@
+// Fuseau force avant tout chargement de module : les workers Jest heritent de
+// l'environnement du process principal. Sans cela, les tests manipulant des
+// dates dependent du fuseau de la machine et la suite n'est pas reproductible.
+process.env.TZ = "UTC";
+
 const localMetadataPathIgnorePatterns = [
 	"<rootDir>/.conductor/",
 	"<rootDir>/.boncli/",

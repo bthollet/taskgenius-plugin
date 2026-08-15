@@ -364,7 +364,7 @@ description: A project defined in content
 				due_date: "2024-01-01",
 				other: "value",
 				project: "Mapped Project",
-				due: 1704038400000,
+				due: Date.UTC(2024, 0, 1),
 			});
 		});
 

@@ -605,7 +605,7 @@ This project involves software development tasks.
 
 			expect(tasks).toHaveLength(1);
 			// Start date should be parsed as timestamp
-			expect(tasks[0].metadata.startDate).toBe(1704038400000);
+			expect(tasks[0].metadata.startDate).toBe(Date.UTC(2024, 0, 1));
 			expect(tasks[0].content).toBe("Task with start date");
 		});
 
@@ -615,7 +615,7 @@ This project involves software development tasks.
 
 			expect(tasks).toHaveLength(1);
 			// Scheduled date should be parsed as timestamp
-			expect(tasks[0].metadata.scheduledDate).toBe(1718380800000);
+			expect(tasks[0].metadata.scheduledDate).toBe(Date.UTC(2024, 5, 15));
 			expect(tasks[0].content).toBe("Task with scheduled date");
 		});
 

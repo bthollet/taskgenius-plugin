@@ -221,7 +221,7 @@ describe("TaskParsingService Integration", () => {
 
 			// Check specific task properties
 			expect(tasks[0].content).toBe("Complete report");
-			expect(tasks[0].metadata.dueDate).toBe(1705248000000);
+			expect(tasks[0].metadata.dueDate).toBe(Date.UTC(2024, 0, 15));
 			expect(tasks[0].completed).toBe(false);
 
 			expect(tasks[1].content).toBe("Review documentation");
@@ -1069,7 +1069,7 @@ describe("TaskParsingService Integration", () => {
 			expect(task).not.toBeNull();
 			expect(task!.content).toBe("Single line task");
 			expect(task!.line).toBe(5);
-			expect(task!.metadata.dueDate).toBe(1714492800000);
+			expect(task!.metadata.dueDate).toBe(Date.UTC(2024, 4, 1));
 			expect(task!.metadata.priority).toBe(4);
 			expect(task!.metadata.tgProject).toEqual({
 				type: "path",
